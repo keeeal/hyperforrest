@@ -1,7 +1,5 @@
 
-import random
 from itertools import combinations
-
 from panda3d.core import Point3, Vec3, Geom, GeomNode, GeomTriangles
 from panda3d.core import GeomVertexData, GeomVertexFormat, GeomVertexWriter
 
@@ -33,12 +31,11 @@ class Tetra3(Shape3):
             q = self.points[3 - idx]
             n = (j-i).cross(k-i).normalized()
             order = (i, j, k) if q.dot(n) < i.dot(n) else (i, k, j)
-            r = random.random()
 
-            for p in order:
+            for c, p in enumerate(order):
                 verts.addData3(p)
                 norms.addData3(n)
-                colrs.addData4(r, r, r, 1.)
+                colrs.addData4(1-c/7, 1-c/7, 1-c/7, 1.)
 
         for i in range(0, self.vertices.get_num_rows(), 3):
             self.triangles.addVertices(*range(i, i + 3))
