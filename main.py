@@ -3,13 +3,10 @@ import sys, math, random
 import numpy as np
 
 from direct.showbase.ShowBase import ShowBase
-from panda3d.core import Point4, Vec4
 from panda3d.core import WindowProperties
 
-from shapes4 import *
-
-window = WindowProperties()
-window.setTitle('hyperforrest')
+from r4 import *
+from colour import *
 
 def rotmat(theta):
     m = np.zeros((4, 4))
@@ -22,16 +19,25 @@ def rotmat(theta):
 class Game(ShowBase):
     def __init__(self):
         super().__init__()
+
+        window = WindowProperties()
+        window.setTitle('hyperforrest')
+        window.setSize(1920, 1080)
         self.win.requestProperties(window)
 
+        def randPoint4():
+            return Point4(*(2*random.random()-1 for i in range(4)))
+
         self.tetra4 = []
-        self.tetra4.append(Tetra4(
-            Point4(0,0,0,0),
-            Point4(0,0,0,1),
-            Point4(0,0,1,0),
-            Point4(0,1,0,0),
-            Point4(1,0,0,0),
-        ))
+        self.tetra4.append(
+            Simplex4((
+                Vertex4(Point4(0,0,0,0), colour=black),
+                Vertex4(Point4(0,0,0,1), colour=white),
+                Vertex4(Point4(0,0,1,0), colour=red),
+                Vertex4(Point4(0,1,0,0), colour=green),
+                Vertex4(Point4(1,0,0,0), colour=blue),
+            ))
+        )
 
         self.nodepaths = []
         self.view = Plane4(
@@ -49,7 +55,7 @@ class Game(ShowBase):
             self.accept(key, self.set_key, [key, True])
             self.accept(key + '-up', self.set_key, [key, False])
 
-        self.set_camera(1, 1, 5)
+        self.set_camera(1, 1, 7)
         self.disable_mouse()
         taskMgr.add(self.loop, 'loop')
 
@@ -57,9 +63,9 @@ class Game(ShowBase):
         self.keys[key] = value
 
     def set_camera(self, theta=None, phi=None, radius=None):
-        if theta: self.camera_theta = theta
-        if phi: self.camera_phi = phi
-        if radius: self.camera_radius = radius
+        if theta is not None: self.camera_theta = theta
+        if phi is not None: self.camera_phi = phi
+        if radius is not None: self.camera_radius = radius
         self.camera.set_pos(
             self.camera_radius*math.sin(self.camera_theta)*math.cos(self.camera_phi),
             self.camera_radius*math.sin(self.camera_theta)*math.sin(self.camera_phi),
@@ -69,13 +75,17 @@ class Game(ShowBase):
 
     def set_view(self, view=None):
         if view: self.view = view
+
         for nodepath in self.nodepaths:
             nodepath.remove_node()
+        self.nodepaths = []
+
         for t4 in self.tetra4:
             t3 = t4.slice(self.view)
-            node = t3.get_node()
-            nodepath = render.attach_new_node(node)
-            self.nodepaths.append(nodepath)
+            if t3:
+                node = t3.get_node()
+                nodepath = render.attach_new_node(node)
+                self.nodepaths.append(nodepath)
 
     def loop(self, task):
         if self.keys['escape']:
