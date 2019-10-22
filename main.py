@@ -28,21 +28,27 @@ class Game(ShowBase):
         def randPoint4():
             return Point4(*(2*random.random()-1 for i in range(4)))
 
-        self.tetra4 = []
-        self.tetra4.append(
-            Simplex4((
-                Vertex4(Point4(0,0,0,0), colour=black),
-                Vertex4(Point4(0,0,0,1), colour=white),
-                Vertex4(Point4(0,0,1,0), colour=red),
-                Vertex4(Point4(0,1,0,0), colour=green),
-                Vertex4(Point4(1,0,0,0), colour=blue),
-            ))
+        self.shapes4 = []
+        # self.shapes4.append(
+        #     Simplex4((
+        #         Vertex4(Point4(0,0,0,0), colour=black),
+        #         Vertex4(Point4(0,0,0,1), colour=white),
+        #         Vertex4(Point4(0,0,1,0), colour=red),
+        #         Vertex4(Point4(0,1,0,0), colour=green),
+        #         Vertex4(Point4(1,0,0,0), colour=blue),
+        #     ))
+        # )
+        self.shapes4.append(
+            Floor4((10,10,10), 0, .1, grey),
         )
 
         self.nodepaths = []
         self.view = Plane4(
-            Point4(0,0,0,0),
-            Vec4(0,0,0,1),
+            origin=Point4( .5, 0, 0, 0),
+            normal=Vec4( 1, 0, 0, 1).normalized(),
+            base_x=Vec4( 1, 0, 0,-1).normalized(),
+            base_y=Vec4( 0, 1, 0, 0).normalized(),
+            base_z=Vec4( 0, 0, 1, 0).normalized(),
         )
         self.set_view(self.view)
 
@@ -80,7 +86,7 @@ class Game(ShowBase):
             nodepath.remove_node()
         self.nodepaths = []
 
-        for t4 in self.tetra4:
+        for t4 in self.shapes4:
             t3 = t4.slice(self.view)
             if t3:
                 node = t3.get_node()
@@ -101,10 +107,12 @@ class Game(ShowBase):
             self.set_camera(phi=self.camera_phi + .1)
 
         if self.keys['a']:
-            self.view.normal = Vec4(*rotmat(+.1).dot(self.view.normal))
+            self.view.normal = Vec4(*rotmat(+.05).dot(self.view.normal)).normalized()
+            self.view.base_x = Vec4(*rotmat(+.05).dot(self.view.base_x)).normalized()
             self.set_view()
         if self.keys['d']:
-            self.view.normal = Vec4(*rotmat(-.1).dot(self.view.normal))
+            self.view.normal = Vec4(*rotmat(-.05).dot(self.view.normal)).normalized()
+            self.view.base_x = Vec4(*rotmat(-.05).dot(self.view.base_x)).normalized()
             self.set_view()
 
         return task.cont

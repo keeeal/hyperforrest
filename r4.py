@@ -1,10 +1,10 @@
 
 from itertools import combinations
-# from functools import total_ordering
 
+import numpy as np
 from panda3d.core import Point4, Vec4
 
-from r3 import Vertex3, Geometry3
+from r3 import Point3, Vertex3, Geometry3
 from colour import white
 
 class R4:
@@ -26,10 +26,16 @@ class Vertex4(R4):
         return self.point == other.point
 
 class Plane4(R4):
-    def __init__(self, point, normal):
+    def __init__(self, origin, normal, base_x, base_y, base_z):
         super().__init__()
-        assert len(point) == len(normal) == len(self)
-        self.point, self.normal = point, normal
+        self.origin, self.normal = origin, normal
+        self.base_x, self.base_y, self.base_z = base_x, base_y, base_z
+
+    def ref(self, point):
+        return Point3(
+            point.dot(self.base_x),
+            point.dot(self.base_y),
+            point.dot(self.base_z))
 
 class Geometry4(R4):
     def __init__(self, vertices, tetrahedra):
@@ -41,7 +47,7 @@ class Geometry4(R4):
         N = [v.normal for v in self.vertices]
         C = [v.colour for v in self.vertices]
 
-        q, n = plane.point, plane.normal
+        q, n = plane.origin, plane.normal
         P_dot_n = [p.dot(n) for p in P]
         q_dot_n = q.dot(n)
 
@@ -56,25 +62,26 @@ class Geometry4(R4):
                 a_dot_n, b_dot_n = P_dot_n[a], P_dot_n[b]
 
                 if a_dot_n == q_dot_n:
-                    x = Vertex3(P[a].get_xyz(), colour=C[a])
-                    intersections.add(x)
+                    v = Vertex3(plane.ref(P[a]), colour=C[a])
+                    intersections.add(v)
+
                 if b_dot_n == q_dot_n:
-                    x = Vertex3(P[b].get_xyz(), colour=C[b])
-                    intersections.add(x)
+                    v = Vertex3(plane.ref(P[b]), colour=C[b])
+                    intersections.add(v)
+
                 if a_dot_n < q_dot_n < b_dot_n:
                     f = (q_dot_n - a_dot_n)/(b_dot_n - a_dot_n)
                     p = P[a] + (P[b] - P[a])*f
                     c = C[a] + (C[b] - C[a])*f
-                    x = Vertex3(p.get_xyz(), colour=c)
-                    intersections.add(x)
+                    v = Vertex3(plane.ref(p), colour=c)
+                    intersections.add(v)
 
             if len(intersections) > 4:
-                print(len(intersections))
                 raise ValueError
 
             elif len(intersections) > 2:
-                m = len(slice_points) - 1
                 slice_points.extend(intersections)
+                m = len(slice_points) - 1
                 for i, j, k in combinations(range(len(intersections)), 3):
                     slice_triangles.append((m-i, m-j, m-k))
                     slice_triangles.append((m-i, m-k, m-j))
@@ -88,8 +95,30 @@ class Simplex4(Geometry4):
         tetrahedra = list(combinations(range(5), 4))
         super().__init__(vertices, tetrahedra)
 
-# class Rectangle4(Geometry4):
-#     def __init__(self, center, x_size, y_size, z_size, w_size):
-#         assert len(points) == 16
-#         tetrahedra = [[i for i in range(5) if i is not j] for j in range(5)]
-#         super().__init__(points, tetrahedra)
+class Floor4(Geometry4):
+    def __init__(self, size, height=0, sigma=1, colour=white):
+        vertices, tetrahedra = [], []
+
+        for x in range(0, size[0]):
+            for y in range(0, size[1]):
+                for w in range(0, size[2]):
+                    z = np.random.normal(height, sigma)
+                    vertices.append(Vertex4(Point4(x, y, z, w), colour=colour))
+
+        for x in range(0, size[0] - 1):
+            for y in range(0, size[1] - 1):
+                for w in range(0, size[2] - 1):
+                    if (x + y + w) % 2:
+                        tetrahedra.append(list(np.ravel_multi_index(((x,x+1,x,x),(y,y,y+1,y),(w,w,w,w+1)), size)))
+                        tetrahedra.append(list(np.ravel_multi_index(((x+1,x+1,x,x),(y+1,y,y+1,y),(w+1,w,w,w+1)), size)))
+                        tetrahedra.append(list(np.ravel_multi_index(((x+1,x,x+1,x+1),(y,y+1,y+1,y+1),(w,w,w,w+1)), size)))
+                        tetrahedra.append(list(np.ravel_multi_index(((x,x+1,x+1,x+1),(y,y,y,y+1),(w+1,w,w+1,w+1)), size)))
+                        tetrahedra.append(list(np.ravel_multi_index(((x,x,x,x+1),(y+1,y,y+1,y+1),(w,w+1,w+1,w+1)), size)))
+                    else:
+                        tetrahedra.append(list(np.ravel_multi_index(((x,x+1,x+1,x+1),(y,y,y+1,y),(w,w,w,w+1)), size)))
+                        tetrahedra.append(list(np.ravel_multi_index(((x,x,x+1,x),(y,y+1,y+1,y+1),(w,w,w,w+1)), size)))
+                        tetrahedra.append(list(np.ravel_multi_index(((x,x,x+1,x),(y,y,y,y+1),(w,w+1,w+1,w+1)), size)))
+                        tetrahedra.append(list(np.ravel_multi_index(((x,x+1,x+1,x),(y,y+1,y,y+1),(w,w,w+1,w+1)), size)))
+                        tetrahedra.append(list(np.ravel_multi_index(((x+1,x+1,x+1,x),(y+1,y+1,y,y+1),(w+1,w,w+1,w+1)), size)))
+
+        super().__init__(vertices, tetrahedra)
