@@ -46,7 +46,7 @@ class Game(ShowBase):
         # )
 
         self.shapes4.append(
-            Sphere4(None, 1, n=8)
+            Sphere4(None, 1, n=16)
         )
 
         self.nodepaths = []

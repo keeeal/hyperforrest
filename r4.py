@@ -50,6 +50,12 @@ class Geometry4(R4):
         super().__init__()
         self.vertices, self.tetrahedra = vertices, tetrahedra
 
+        P = [v.point for v in self.vertices]
+        self.tetra_means = [(P[a] + P[b] + P[c] + P[d])/4
+            for a,b,c,d in tetrahedra]
+        self.tetra_radii = [max((P[i]-m).length() for i in t)
+            for t, m in zip(tetrahedra, self.tetra_means)]
+
     def slice(self, plane):
         P = [v.point for v in self.vertices]
         # N = [v.normal for v in self.vertices]
@@ -62,7 +68,10 @@ class Geometry4(R4):
         slice_points = []
         slice_triangles = []
 
-        for tetra in self.tetrahedra:
+        for tetra, mean, radius in zip(self.tetrahedra, self.tetra_means, self.tetra_radii):
+            if radius < abs(mean.dot(n) - q_dot_n):
+                continue
+
             tetra = sorted(tetra, key=lambda i: P_dot_n[i])
             intersections = set()
 
@@ -90,6 +99,7 @@ class Geometry4(R4):
             elif len(intersections) > 2:
                 slice_points.extend(intersections)
                 m = len(slice_points) - 1
+
                 for i, j, k in combinations(range(len(intersections)), 3):
                     slice_triangles.append((m-i, m-j, m-k))
                     slice_triangles.append((m-i, m-k, m-j))
