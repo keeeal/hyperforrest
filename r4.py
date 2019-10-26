@@ -26,16 +26,24 @@ class Vertex4(R4):
         return self.point == other.point
 
 class Plane4(R4):
-    def __init__(self, origin, normal, base_x, base_y, base_z):
+    '''
+    A hyperplane in R4.
+
+    Args:
+        origin (Point4): A point on the plane.
+        normal (Vec4): A unit vector perpendicular to the plane.
+        basis (list): ...
+    '''
+
+    def __init__(self, origin, normal, basis):
         super().__init__()
-        self.origin, self.normal = origin, normal
-        self.base_x, self.base_y, self.base_z = base_x, base_y, base_z
+        self.origin, self.normal, self.basis = origin, normal, basis
 
     def ref(self, point):
         return Point3(
-            point.dot(self.base_x),
-            point.dot(self.base_y),
-            point.dot(self.base_z))
+            point.dot(self.basis[0]),
+            point.dot(self.basis[1]),
+            point.dot(self.basis[2]))
 
 class Geometry4(R4):
     def __init__(self, vertices, tetrahedra):
@@ -44,7 +52,7 @@ class Geometry4(R4):
 
     def slice(self, plane):
         P = [v.point for v in self.vertices]
-        N = [v.normal for v in self.vertices]
+        # N = [v.normal for v in self.vertices]
         C = [v.colour for v in self.vertices]
 
         q, n = plane.origin, plane.normal
@@ -105,20 +113,51 @@ class Floor4(Geometry4):
                     z = np.random.normal(height, sigma)
                     vertices.append(Vertex4(Point4(x, y, z, w), colour=colour))
 
-        for x in range(0, size[0] - 1):
-            for y in range(0, size[1] - 1):
-                for w in range(0, size[2] - 1):
-                    if (x + y + w) % 2:
-                        tetrahedra.append(list(np.ravel_multi_index(((x,x+1,x,x),(y,y,y+1,y),(w,w,w,w+1)), size)))
-                        tetrahedra.append(list(np.ravel_multi_index(((x+1,x+1,x,x),(y+1,y,y+1,y),(w+1,w,w,w+1)), size)))
-                        tetrahedra.append(list(np.ravel_multi_index(((x+1,x,x+1,x+1),(y,y+1,y+1,y+1),(w,w,w,w+1)), size)))
-                        tetrahedra.append(list(np.ravel_multi_index(((x,x+1,x+1,x+1),(y,y,y,y+1),(w+1,w,w+1,w+1)), size)))
-                        tetrahedra.append(list(np.ravel_multi_index(((x,x,x,x+1),(y+1,y,y+1,y+1),(w,w+1,w+1,w+1)), size)))
+        for i in range(0, size[0] - 1):
+            for j in range(0, size[1] - 1):
+                for k in range(0, size[2] - 1):
+                    if (i + j + k) % 2:
+                        tetrahedra.append(list(np.ravel_multi_index(((i,i+1,i,i),(j,j,j+1,j),(k,k,k,k+1)), size)))
+                        tetrahedra.append(list(np.ravel_multi_index(((i+1,i+1,i,i),(j+1,j,j+1,j),(k+1,k,k,k+1)), size)))
+                        tetrahedra.append(list(np.ravel_multi_index(((i+1,i,i+1,i+1),(j,j+1,j+1,j+1),(k,k,k,k+1)), size)))
+                        tetrahedra.append(list(np.ravel_multi_index(((i,i+1,i+1,i+1),(j,j,j,j+1),(k+1,k,k+1,k+1)), size)))
+                        tetrahedra.append(list(np.ravel_multi_index(((i,i,i,i+1),(j+1,j,j+1,j+1),(k,k+1,k+1,k+1)), size)))
                     else:
-                        tetrahedra.append(list(np.ravel_multi_index(((x,x+1,x+1,x+1),(y,y,y+1,y),(w,w,w,w+1)), size)))
-                        tetrahedra.append(list(np.ravel_multi_index(((x,x,x+1,x),(y,y+1,y+1,y+1),(w,w,w,w+1)), size)))
-                        tetrahedra.append(list(np.ravel_multi_index(((x,x,x+1,x),(y,y,y,y+1),(w,w+1,w+1,w+1)), size)))
-                        tetrahedra.append(list(np.ravel_multi_index(((x,x+1,x+1,x),(y,y+1,y,y+1),(w,w,w+1,w+1)), size)))
-                        tetrahedra.append(list(np.ravel_multi_index(((x+1,x+1,x+1,x),(y+1,y+1,y,y+1),(w+1,w,w+1,w+1)), size)))
+                        tetrahedra.append(list(np.ravel_multi_index(((i,i+1,i+1,i+1),(j,j,j+1,j),(k,k,k,k+1)), size)))
+                        tetrahedra.append(list(np.ravel_multi_index(((i,i,i+1,i),(j,j+1,j+1,j+1),(k,k,k,k+1)), size)))
+                        tetrahedra.append(list(np.ravel_multi_index(((i,i,i+1,i),(j,j,j,j+1),(k,k+1,k+1,k+1)), size)))
+                        tetrahedra.append(list(np.ravel_multi_index(((i,i+1,i+1,i),(j,j+1,j,j+1),(k,k,k+1,k+1)), size)))
+                        tetrahedra.append(list(np.ravel_multi_index(((i+1,i+1,i+1,i),(j+1,j+1,j,j+1),(k+1,k,k+1,k+1)), size)))
+
+        super().__init__(vertices, tetrahedra)
+
+class Sphere4(Geometry4):
+    def __init__(self, center, radius, colour=white, n=8):
+        vertices, tetrahedra = [], []
+
+        for theta in np.linspace(0, np.pi, n):
+            for phi in np.linspace(0, np.pi, n):
+                for omega in np.linspace(0, 2*np.pi, 2*n):
+                    x = radius*np.cos(theta)
+                    y = radius*np.sin(theta)*np.cos(phi)
+                    z = radius*np.sin(theta)*np.sin(phi)*np.cos(omega)
+                    w = radius*np.sin(theta)*np.sin(phi)*np.sin(omega)
+                    vertices.append(Vertex4(Point4(x, y, z, w), colour=colour))
+
+        for i in range(n-1):
+            for j in range(n-1):
+                for k in range(2*n-1):
+                    if (i + j + k) % 2:
+                        tetrahedra.append(list(np.ravel_multi_index(((i,i+1,i,i),(j,j,j+1,j),(k,k,k,k+1)), (n,n,2*n))))
+                        tetrahedra.append(list(np.ravel_multi_index(((i+1,i+1,i,i),(j+1,j,j+1,j),(k+1,k,k,k+1)), (n,n,2*n))))
+                        tetrahedra.append(list(np.ravel_multi_index(((i+1,i,i+1,i+1),(j,j+1,j+1,j+1),(k,k,k,k+1)), (n,n,2*n))))
+                        tetrahedra.append(list(np.ravel_multi_index(((i,i+1,i+1,i+1),(j,j,j,j+1),(k+1,k,k+1,k+1)), (n,n,2*n))))
+                        tetrahedra.append(list(np.ravel_multi_index(((i,i,i,i+1),(j+1,j,j+1,j+1),(k,k+1,k+1,k+1)), (n,n,2*n))))
+                    else:
+                        tetrahedra.append(list(np.ravel_multi_index(((i,i+1,i+1,i+1),(j,j,j+1,j),(k,k,k,k+1)), (n,n,2*n))))
+                        tetrahedra.append(list(np.ravel_multi_index(((i,i,i+1,i),(j,j+1,j+1,j+1),(k,k,k,k+1)), (n,n,2*n))))
+                        tetrahedra.append(list(np.ravel_multi_index(((i,i,i+1,i),(j,j,j,j+1),(k,k+1,k+1,k+1)), (n,n,2*n))))
+                        tetrahedra.append(list(np.ravel_multi_index(((i,i+1,i+1,i),(j,j+1,j,j+1),(k,k,k+1,k+1)), (n,n,2*n))))
+                        tetrahedra.append(list(np.ravel_multi_index(((i+1,i+1,i+1,i),(j+1,j+1,j,j+1),(k+1,k,k+1,k+1)), (n,n,2*n))))
 
         super().__init__(vertices, tetrahedra)

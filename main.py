@@ -1,9 +1,10 @@
 
-import sys, math, random
+import sys, random
 import numpy as np
 
 from direct.showbase.ShowBase import ShowBase
 from panda3d.core import WindowProperties
+from panda3d.core import DirectionalLight
 
 from r4 import *
 from colour import *
@@ -29,6 +30,7 @@ class Game(ShowBase):
             return Point4(*(2*random.random()-1 for i in range(4)))
 
         self.shapes4 = []
+
         # self.shapes4.append(
         #     Simplex4((
         #         Vertex4(Point4(0,0,0,0), colour=black),
@@ -38,19 +40,33 @@ class Game(ShowBase):
         #         Vertex4(Point4(1,0,0,0), colour=blue),
         #     ))
         # )
+
+        # self.shapes4.append(
+        #     Floor4((10,10,10), 0, .1, white),
+        # )
+
         self.shapes4.append(
-            Floor4((10,10,10), 0, .1, grey),
+            Sphere4(None, 1, n=8)
         )
 
         self.nodepaths = []
+
         self.view = Plane4(
-            origin=Point4( .5, 0, 0, 0),
+            origin=Point4( 0, 0, 0, 0),
             normal=Vec4( 1, 0, 0, 1).normalized(),
-            base_x=Vec4( 1, 0, 0,-1).normalized(),
-            base_y=Vec4( 0, 1, 0, 0).normalized(),
-            base_z=Vec4( 0, 0, 1, 0).normalized(),
+            basis= [
+                Vec4( 1, 0, 0,-1).normalized(),
+                Vec4( 0, 1, 0, 0).normalized(),
+                Vec4( 0, 0, 1, 0).normalized(),
+            ],
         )
         self.set_view(self.view)
+
+        directionalLight = DirectionalLight('directionalLight')
+        directionalLight.setColor((0.9, 0.9, 0.9, 1))
+        directionalLightNP = render.attachNewNode(directionalLight)
+        directionalLightNP.setHpr(180, -70, 0)
+        render.setLight(directionalLightNP)
 
         self.keys = {
             'q':False, 'w':False, 'e':False, 'a':False, 's':False, 'd':False,
@@ -73,9 +89,9 @@ class Game(ShowBase):
         if phi is not None: self.camera_phi = phi
         if radius is not None: self.camera_radius = radius
         self.camera.set_pos(
-            self.camera_radius*math.sin(self.camera_theta)*math.cos(self.camera_phi),
-            self.camera_radius*math.sin(self.camera_theta)*math.sin(self.camera_phi),
-            self.camera_radius*math.cos(self.camera_theta),
+            self.camera_radius*np.sin(self.camera_theta)*np.cos(self.camera_phi),
+            self.camera_radius*np.sin(self.camera_theta)*np.sin(self.camera_phi),
+            self.camera_radius*np.cos(self.camera_theta),
         )
         self.camera.look_at(0, 0, 0)
 
@@ -98,9 +114,9 @@ class Game(ShowBase):
             sys.exit()
 
         if self.keys['arrow_up']:
-            self.set_camera(theta=max(self.camera_theta - .1, 1*math.pi/8))
+            self.set_camera(theta=max(self.camera_theta - .1, 1*np.pi/8))
         if self.keys['arrow_down']:
-            self.set_camera(theta=min(self.camera_theta + .1, 7*math.pi/8))
+            self.set_camera(theta=min(self.camera_theta + .1, 7*np.pi/8))
         if self.keys['arrow_left']:
             self.set_camera(phi=self.camera_phi - .1)
         if self.keys['arrow_right']:
@@ -108,11 +124,11 @@ class Game(ShowBase):
 
         if self.keys['a']:
             self.view.normal = Vec4(*rotmat(+.05).dot(self.view.normal)).normalized()
-            self.view.base_x = Vec4(*rotmat(+.05).dot(self.view.base_x)).normalized()
+            self.view.basis[0] = Vec4(*rotmat(+.05).dot(self.view.basis[0])).normalized()
             self.set_view()
         if self.keys['d']:
             self.view.normal = Vec4(*rotmat(-.05).dot(self.view.normal)).normalized()
-            self.view.base_x = Vec4(*rotmat(-.05).dot(self.view.base_x)).normalized()
+            self.view.basis[0] = Vec4(*rotmat(-.05).dot(self.view.basis[0])).normalized()
             self.set_view()
 
         return task.cont
