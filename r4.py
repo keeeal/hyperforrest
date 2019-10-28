@@ -64,48 +64,45 @@ class Mesh4(R4):
         self.colours = np.array(colours)
         self.tetrahedra = np.array(tetrahedra)
 
-        self.means = np.mean(self.vertices[self.tetrahedra], axis=0)
-        self.radii = self.vertices[self.tetrahedra] - np.stack(2*(self,means,), axis=1)
+        self.means = np.mean(self.vertices[self.tetrahedra], axis=1)
+        self.radii = self.vertices[self.tetrahedra] - np.stack(4*(m,), axis=1)
+        self.radii = np.max(np.linalg.norm(self.radii, axis=2), axis=1)
 
-        
-
-        # self.g3 = 1
+        self.mesh3 = 1
 
     def slice(self, plane):
-        P = [v.point for v in self.verts]
-        # N = [v.normal for v in self.verts]
-        C = [v.colour for v in self.verts]
+        slice_vertices, slice_normals = [], []
+        slice_colours, slice_triangles = [], []
 
-        q, n = plane.origin, plane.normal
-        P_dot_n = [p.dot(n) for p in P]
-        q_dot_n = q.dot(n)
+        V_dot_n = self.vertices.dot(plane.normal)
+        M_dot_n = self.means.dot(plane.normal)
+        q_dot_n = plane.origin.dot(plane.normal)
 
-        slice_points = []
-        slice_triangles = []
-
-        for t, mean, radius in zip(self.tetra, self.means, self.radii):
-            if radius < abs(mean.dot(n) - q_dot_n):
+        for t, m_dot_n, r in zip(self.tetrahedra, M_dot_n, self.radii):
+            if r < abs(m_dot_n - q_dot_n):
                 continue
 
-            t = sorted(t, key=lambda i: P_dot_n[i])
             intersections = set()
+            t = sorted(t, key=lambda i: V_dot_n[i])
 
             for a, b in combinations(t, 2):
-                a_dot_n, b_dot_n = P_dot_n[a], P_dot_n[b]
+                a_dot_n, b_dot_n = V_dot_n[a], V_dot_n[b]
 
                 if a_dot_n == q_dot_n:
-                    v = Vertex3(plane.ref(P[a]), colour=C[a])
+                    v = plane.transform(self.vertices[a])
+                    c = self.colours[a]
                     intersections.add(v)
 
                 if b_dot_n == q_dot_n:
-                    v = Vertex3(plane.ref(P[b]), colour=C[b])
+                    v = plane.transform(self.vertices[b])
+                    c = self.colours[b]
                     intersections.add(v)
 
                 if a_dot_n < q_dot_n < b_dot_n:
                     f = (q_dot_n - a_dot_n)/(b_dot_n - a_dot_n)
-                    p = P[a] + (P[b] - P[a])*f
-                    c = C[a] + (C[b] - C[a])*f
-                    v = Vertex3(plane.ref(p), colour=c)
+                    v = self.vertices[a] + (self.vertices[b] - self.vertices[a])*f
+                    c = self.colours[a] + (self.colours[b] - self.colours[a])*f
+                    v = plane.transform(v)
                     intersections.add(v)
 
             if len(intersections) > 4:
