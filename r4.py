@@ -8,58 +8,73 @@ from r3 import Point3, Vertex3, Geometry3
 from colour import white
 
 class R4:
-    def __len__(self):
-        return 4
-
-class Vertex4(R4):
-    def __init__(self, point, normal=None, colour=None):
-        super().__init__()
-        self.point, self.normal = point, normal
-        self.colour = colour if colour else white
-
-    def __hash__(self):
-        return hash(self.point)
-
-    def __eq__(self, other):
-        if not isinstance(other, Vertex4):
-            return NotImplemented
-        return self.point == other.point
+    '''
+    Base class in R4.
+    '''
 
 class Plane4(R4):
     '''
     A hyperplane in R4.
 
     Args:
-        origin (Point4): A point on the plane.
-        normal (Vec4): A unit vector perpendicular to the plane.
-        basis (list): ...
+        origin :: array_like (4,) [X,Y,Z,W]
+            A point on the plane.
+        normal :: array_like (4,) [X,Y,Z,W]
+            A unit vector perpendicular to the plane.
+        basis :: array_like (4,3)
+            An array, the columns of which are 4-vectors defining the
+            coordinate space within the hyperplane.
     '''
 
     def __init__(self, origin, normal, basis):
         super().__init__()
-        self.origin, self.normal, self.basis = origin, normal, basis
+        self.origin = np.array(origin)
+        self.normal = np.array(normal)
+        self.basis = np.array(basis)
 
-    def ref(self, point):
-        return Point3(
-            point.dot(self.basis[0]),
-            point.dot(self.basis[1]),
-            point.dot(self.basis[2]))
+    def transform(self, points):
+        '''
+        Transform points (R4 -> R3) into the coordinate space of the plane.
 
-class Geometry4(R4):
-    def __init__(self, vertices, tetrahedra):
+        Args:
+            points :: array_like (N,4)
+                A list of points to be transformed.
+        '''
+        return np.array(points).dot(self.basis)
+
+class Mesh4(R4):
+    '''
+    Base class for meshes in R4.
+
+    Args:
+        vertices :: array_like (N,4)
+            A list of points in the mesh.
+        normals :: array_like (N,4)
+            A list of vectors perpendicular to the mesh at each vertex.
+        colours :: array_like (N,4)
+            A list of colours at each vertex.
+        tetrahedra :; array_like (M,4)
+            A list of indices that group vertices into 4-simplices.
+    '''
+
+    def __init__(self, vertices, normals, colours, tetrahedra):
         super().__init__()
-        self.vertices, self.tetrahedra = vertices, tetrahedra
+        self.vertices = np.array(vertices)
+        self.normals = np.array(normals)
+        self.colours = np.array(colours)
+        self.tetrahedra = np.array(tetrahedra)
 
-        P = [v.point for v in self.vertices]
-        self.tetra_means = [(P[a] + P[b] + P[c] + P[d])/4
-            for a,b,c,d in tetrahedra]
-        self.tetra_radii = [max((P[i]-m).length() for i in t)
-            for t, m in zip(tetrahedra, self.tetra_means)]
+        self.means = np.mean(self.vertices[self.tetrahedra], axis=0)
+        self.radii = self.vertices[self.tetrahedra] - np.stack(2*(self,means,), axis=1)
+
+        
+
+        # self.g3 = 1
 
     def slice(self, plane):
-        P = [v.point for v in self.vertices]
-        # N = [v.normal for v in self.vertices]
-        C = [v.colour for v in self.vertices]
+        P = [v.point for v in self.verts]
+        # N = [v.normal for v in self.verts]
+        C = [v.colour for v in self.verts]
 
         q, n = plane.origin, plane.normal
         P_dot_n = [p.dot(n) for p in P]
@@ -68,14 +83,14 @@ class Geometry4(R4):
         slice_points = []
         slice_triangles = []
 
-        for tetra, mean, radius in zip(self.tetrahedra, self.tetra_means, self.tetra_radii):
+        for t, mean, radius in zip(self.tetra, self.means, self.radii):
             if radius < abs(mean.dot(n) - q_dot_n):
                 continue
 
-            tetra = sorted(tetra, key=lambda i: P_dot_n[i])
+            t = sorted(t, key=lambda i: P_dot_n[i])
             intersections = set()
 
-            for a, b in combinations(tetra, 2):
+            for a, b in combinations(t, 2):
                 a_dot_n, b_dot_n = P_dot_n[a], P_dot_n[b]
 
                 if a_dot_n == q_dot_n:
