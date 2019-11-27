@@ -31,34 +31,43 @@ class Game(ShowBase):
 
         self.shapes4 = []
 
-        # self.shapes4.append(
-        #     Simplex4((
-        #         Vertex4(Point4(0,0,0,0), colour=black),
-        #         Vertex4(Point4(0,0,0,1), colour=white),
-        #         Vertex4(Point4(0,0,1,0), colour=red),
-        #         Vertex4(Point4(0,1,0,0), colour=green),
-        #         Vertex4(Point4(1,0,0,0), colour=blue),
-        #     ))
-        # )
+        self.shapes4.append(
+            Simplex4(
+                (
+                    (0,0,0,0),
+                    (0,0,0,1),
+                    (0,0,1,0),
+                    (0,1,0,0),
+                    (1,0,0,0),
+                ),
+                (
+                    black,
+                    white,
+                    red,
+                    green,
+                    blue,
+                )
+            )
+        )
 
         # self.shapes4.append(
         #     Floor4((10,10,10), 0, .1, white),
         # )
 
-        self.shapes4.append(
-            Sphere4(None, 1, n=16)
-        )
+        # self.shapes4.append(
+        #     Sphere4(None, 1, n=16)
+        # )
 
         self.nodepaths = []
 
         self.view = Plane4(
-            origin=Point4( 0, 0, 0, 0),
-            normal=Vec4( 1, 0, 0, 1).normalized(),
-            basis= [
-                Vec4( 1, 0, 0,-1).normalized(),
-                Vec4( 0, 1, 0, 0).normalized(),
-                Vec4( 0, 0, 1, 0).normalized(),
-            ],
+            origin=(.5, 0, 0, 0),
+            normal=( 1, 0, 0, 1),
+            basis= np.array([
+                ( 1, 0, 0,-1),
+                ( 0, 1, 0, 0),
+                ( 0, 0, 1, 0),
+            ]).T,
         )
         self.set_view(self.view)
 

@@ -26,7 +26,7 @@ class Vertex3(R3):
         return self.point == other.point
 
 class Geometry3(R3):
-    def __init__(self, vertices, triangles):
+    def __init__(self, vertices, normals, colours, triangles):
         super().__init__()
         self.vertices, self.triangles = vertices, triangles
 
