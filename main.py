@@ -1,86 +1,61 @@
 
-import sys, random
+import sys
+import random
+
+import torch
 import numpy as np
 
 from direct.showbase.ShowBase import ShowBase
-from panda3d.core import WindowProperties
 from panda3d.core import DirectionalLight
+from panda3d.core import loadPrcFile
 
-from r4 import *
-from colour import *
+from utils.r4 import *
+from utils.colour import *
+from utils.math import *
 
-def rotmat(theta):
-    m = np.zeros((4, 4))
-    m[0,0] =  np.cos(theta)
-    m[0,3] = -np.sin(theta)
-    m[3,0] =  np.sin(theta)
-    m[3,3] =  np.cos(theta)
-    return m
+loadPrcFile('config/config.prc')
+
 
 class Game(ShowBase):
     def __init__(self):
         super().__init__()
 
-        window = WindowProperties()
-        window.setTitle('hyperforrest')
-        window.setSize(1920, 1080)
-        self.win.requestProperties(window)
-
-        def randPoint4():
-            return Point4(*(2*random.random()-1 for i in range(4)))
-
         self.shapes4 = []
 
         self.shapes4.append(
             Simplex4(
+                # 2*torch.rand(5, 4) - 1,
+                torch.eye(5, 4),
                 (
-                    (0,0,0,0),
-                    (0,0,0,1),
-                    (0,0,1,0),
-                    (0,1,0,0),
-                    (1,0,0,0),
-                ),
-                (
-                    black,
-                    white,
-                    red,
-                    green,
-                    blue,
+                    GREEN,
+                    WHITE,
+                    BLACK,
+                    RED,
+                    BLUE,
                 )
             )
         )
 
-        # self.shapes4.append(
-        #     Floor4((10,10,10), 0, .1, white),
-        # )
-
-        # self.shapes4.append(
-        #     Sphere4(None, 1, n=16)
-        # )
-
         self.nodepaths = []
 
         self.view = Plane4(
-            origin=(.5, 0, 0, 0),
-            normal=( 1, 0, 0, 1),
-            basis= np.array([
-                ( 1, 0, 0,-1),
-                ( 0, 1, 0, 0),
-                ( 0, 0, 1, 0),
-            ]).T,
+            origin=(0, 0, 0, 0),
+            normal=(0, 0, 0, 1),
+            basis=torch.eye(4, 3),
         )
+
         self.set_view(self.view)
 
-        directionalLight = DirectionalLight('directionalLight')
-        directionalLight.setColor((0.9, 0.9, 0.9, 1))
-        directionalLightNP = render.attachNewNode(directionalLight)
-        directionalLightNP.setHpr(180, -70, 0)
-        render.setLight(directionalLightNP)
+        # directionalLight = DirectionalLight('directionalLight')
+        # directionalLight.setColor((0.9, 0.9, 0.9, 1))
+        # directionalLightNP = render.attachNewNode(directionalLight)
+        # directionalLightNP.setHpr(180, -70, 0)
+        # render.setLight(directionalLightNP)
 
         self.keys = {
-            'q':False, 'w':False, 'e':False, 'a':False, 's':False, 'd':False,
-            'arrow_up':False, 'arrow_down':False, 'arrow_left':False, 'arrow_right':False,
-            'escape':False, 'control':False,
+            'q': False, 'w': False, 'e': False, 'a': False, 's': False, 'd': False,
+            'arrow_up': False, 'arrow_down': False, 'arrow_left': False, 'arrow_right': False,
+            'escape': False, 'control': False,
         }
         for key in self.keys:
             self.accept(key, self.set_key, [key, True])
@@ -94,18 +69,24 @@ class Game(ShowBase):
         self.keys[key] = value
 
     def set_camera(self, theta=None, phi=None, radius=None):
-        if theta is not None: self.camera_theta = theta
-        if phi is not None: self.camera_phi = phi
-        if radius is not None: self.camera_radius = radius
+        if theta is not None:
+            self.camera_theta = theta
+        if phi is not None:
+            self.camera_phi = phi
+        if radius is not None:
+            self.camera_radius = radius
         self.camera.set_pos(
-            self.camera_radius*np.sin(self.camera_theta)*np.cos(self.camera_phi),
-            self.camera_radius*np.sin(self.camera_theta)*np.sin(self.camera_phi),
-            self.camera_radius*np.cos(self.camera_theta),
+            self.camera_radius * np.sin(self.camera_theta) *
+                np.cos(self.camera_phi),
+            self.camera_radius * np.sin(self.camera_theta) *
+                np.sin(self.camera_phi),
+            self.camera_radius * np.cos(self.camera_theta),
         )
         self.camera.look_at(0, 0, 0)
 
     def set_view(self, view=None):
-        if view: self.view = view
+        if view:
+            self.view = view
 
         for nodepath in self.nodepaths:
             nodepath.remove_node()
@@ -132,19 +113,24 @@ class Game(ShowBase):
             self.set_camera(phi=self.camera_phi + .1)
 
         if self.keys['a']:
-            self.view.normal = Vec4(*rotmat(+.05).dot(self.view.normal)).normalized()
-            self.view.basis[0] = Vec4(*rotmat(+.05).dot(self.view.basis[0])).normalized()
+            self.view.normal = norm(rotmat(+.05).matmul(self.view.normal))
+            self.view.basis = norm(rotmat(+.05).matmul(self.view.basis))
             self.set_view()
         if self.keys['d']:
-            self.view.normal = Vec4(*rotmat(-.05).dot(self.view.normal)).normalized()
-            self.view.basis[0] = Vec4(*rotmat(-.05).dot(self.view.basis[0])).normalized()
+            self.view.normal = norm(rotmat(-.05).matmul(self.view.normal))
+            self.view.basis = norm(rotmat(-.05).matmul(self.view.basis))
             self.set_view()
+
+        # print(self.view.normal)
 
         return task.cont
 
+
 def main():
-    game = Game()
-    game.run()
+    with torch.no_grad():
+        game = Game()
+        game.run()
+
 
 if __name__ == '__main__':
     main()
