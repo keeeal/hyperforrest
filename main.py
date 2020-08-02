@@ -12,6 +12,7 @@ from panda3d.core import loadPrcFile
 from utils.r4 import *
 from utils.colour import *
 from utils.math import *
+from utils.scene import *
 
 loadPrcFile('config/config.prc')
 
@@ -20,21 +21,30 @@ class Game(ShowBase):
     def __init__(self):
         super().__init__()
 
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        print('Using', self.device)
+
         self.shapes4 = []
 
-        self.shapes4.append(
-            Simplex4(
-                # 2*torch.rand(5, 4) - 1,
-                torch.eye(5, 4),
-                (
-                    GREEN,
-                    WHITE,
-                    BLACK,
-                    RED,
-                    BLUE,
-                )
+        for i in range(1):
+            self.shapes4.append(
+
+                # Simplex4(
+                #     # 2*torch.rand(5, 4),
+                #     torch.eye(5, 4) + .01,
+                #     (
+                #         GREEN,
+                #         WHITE,
+                #         BLACK,
+                #         RED,
+                #         BLUE,
+                #     )
+                # ).to(self.device)
+
+                QuickSphere4(2*torch.rand(4), 1, n=12).to(self.device)
+
+                # Floor4([10, 10, 10], sigma=.1).to(self.device)
             )
-        )
 
         self.nodepaths = []
 
@@ -42,15 +52,15 @@ class Game(ShowBase):
             origin=(0, 0, 0, 0),
             normal=(0, 0, 0, 1),
             basis=torch.eye(4, 3),
-        )
+        ).to(self.device)
 
         self.set_view(self.view)
 
-        # directionalLight = DirectionalLight('directionalLight')
-        # directionalLight.setColor((0.9, 0.9, 0.9, 1))
-        # directionalLightNP = render.attachNewNode(directionalLight)
-        # directionalLightNP.setHpr(180, -70, 0)
-        # render.setLight(directionalLightNP)
+        directionalLight = DirectionalLight('directionalLight')
+        directionalLight.setColor((0.9, 0.9, 0.9, 1))
+        directionalLightNP = render.attachNewNode(directionalLight)
+        directionalLightNP.setHpr(180, -70, 0)
+        render.setLight(directionalLightNP)
 
         self.keys = {
             'q': False, 'w': False, 'e': False, 'a': False, 's': False, 'd': False,
@@ -63,7 +73,7 @@ class Game(ShowBase):
 
         self.set_camera(1, 1, 7)
         self.disable_mouse()
-        taskMgr.add(self.loop, 'loop')
+        self.taskMgr.add(self.loop, 'loop')
 
     def set_key(self, key, value):
         self.keys[key] = value
@@ -96,7 +106,7 @@ class Game(ShowBase):
             t3 = t4.slice(self.view)
             if t3:
                 node = t3.get_node()
-                nodepath = render.attach_new_node(node)
+                nodepath = self.render.attach_new_node(node)
                 self.nodepaths.append(nodepath)
 
     def loop(self, task):
@@ -113,15 +123,15 @@ class Game(ShowBase):
             self.set_camera(phi=self.camera_phi + .1)
 
         if self.keys['a']:
-            self.view.normal = norm(rotmat(+.05).matmul(self.view.normal))
-            self.view.basis = norm(rotmat(+.05).matmul(self.view.basis))
+            r = rotmat(+.05).to(self.device)
+            self.view.normal = norm(r.matmul(self.view.normal))
+            self.view.basis = norm(r.matmul(self.view.basis))
             self.set_view()
         if self.keys['d']:
-            self.view.normal = norm(rotmat(-.05).matmul(self.view.normal))
-            self.view.basis = norm(rotmat(-.05).matmul(self.view.basis))
+            r = rotmat(-.05).to(self.device)
+            self.view.normal = norm(r.matmul(self.view.normal))
+            self.view.basis = norm(r.matmul(self.view.basis))
             self.set_view()
-
-        # print(self.view.normal)
 
         return task.cont
 

@@ -1,4 +1,6 @@
 
+import torch
+
 from panda3d.core import Geom, GeomNode, GeomTriangles
 from panda3d.core import GeomVertexData, GeomVertexFormat, GeomVertexWriter
 
@@ -17,14 +19,20 @@ class R3:
 class Geometry3(R3):
     def __init__(self, vertices, normals, colours, triangles):
         super().__init__()
-        self.vertices = vertices.numpy()
-        self.normals = normals.numpy()
-        self.colours = colours.numpy()
-        self.triangles = triangles.numpy()
 
-        # print(vertices)
-        # print(normals)
-        # print(colours)
+        if isinstance(vertices, torch.Tensor):
+            vertices = vertices.cpu().numpy()
+        if isinstance(normals, torch.Tensor):
+            normals = normals.cpu().numpy()
+        if isinstance(colours, torch.Tensor):
+            colours = colours.cpu().numpy()
+        if isinstance(triangles, torch.Tensor):
+            triangles = triangles.cpu().numpy()
+
+        self.vertices = vertices
+        self.normals = normals
+        self.colours = colours
+        self.triangles = triangles
 
     def get_node(self):
         vertex_data = GeomVertexData(repr(self),
