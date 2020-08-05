@@ -27,23 +27,24 @@ class Game(ShowBase):
         self.shapes4 = []
 
         for i in range(1):
+            # self.shapes4.append(
+            #     Simplex4(
+            #         3*torch.rand(5, 4) - 1,
+            #         # torch.eye(5, 4) + .01,
+            #         (
+            #             GREEN,
+            #             WHITE,
+            #             BLACK,
+            #             RED,
+            #             BLUE,
+            #         )
+            #     ).to(self.device)
+            # )
+            # self.shapes4.append(
+            #     QuickSphere4(1, torch.rand(4) + 1, n=12).to(self.device)
+            # )
             self.shapes4.append(
-
-                # Simplex4(
-                #     # 2*torch.rand(5, 4),
-                #     torch.eye(5, 4) + .01,
-                #     (
-                #         GREEN,
-                #         WHITE,
-                #         BLACK,
-                #         RED,
-                #         BLUE,
-                #     )
-                # ).to(self.device)
-
-                QuickSphere4(2*torch.rand(4), 1, n=12).to(self.device)
-
-                # Floor4([10, 10, 10], sigma=.1).to(self.device)
+                Terrain4().to(self.device)
             )
 
         self.nodepaths = []
