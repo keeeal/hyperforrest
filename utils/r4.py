@@ -29,7 +29,7 @@ class Plane4:
         super().__init__()
         self.origin = tensor(origin, dtype=torch.float)
         self.normal = norm(tensor(normal, dtype=torch.float))
-        self.basis = tensor(basis, dtype=torch.float)
+        self.basis = norm(tensor(basis, dtype=torch.float))
 
     def to(self, device):
         return Plane4(
@@ -169,8 +169,8 @@ class Simplex4(Mesh4):
         vertices :: array_like (5,4)
             The vertex postitions of the 4-simplex.
         colours :: array_like (5,4) or (1,4) (optional)
-            The colours of each vertex. If shape (1,4) is provided then all
-            five vertices are the same colour.
+            The colours of each vertex. If a shape (1,4) is provided then all
+            vertices are the same colour. Default: WHITE.
     '''
 
     def __init__(self, vertices, colours=None):
@@ -221,11 +221,21 @@ class Simplex4(Mesh4):
 
 
 class Terrain4(Mesh4):
-    def __init__(self, size, seed=None):
+    '''
+    4D terrain procedurally generated using simplex noise.
+
+    Args:
+    '''
+
+    def __init__(self, size, scale=1, seed=None):
         if seed is None:
             seed = getrandbits(32)
 
         self.noise = OpenSimplex(seed).noise3d
+        super().__init__([], [], [], [])
+
+    def slice(self, plane):
+        pass
 
 
 class Sphere4(Mesh4):
@@ -281,6 +291,24 @@ class Sphere4(Mesh4):
 
 
 class QuickSphere4(Mesh4):
+    '''
+    A 4-sphere stored as a center and a radius. This class overrides the usual
+    slice method to take advantage of the fact that a sliced 4-sphere is always
+    a 3-sphere of known position and radius.
+
+    Args:
+        radius :: float
+            The radius of the 4-sphere.
+        center :: array_like (4,) (optional)
+            The position of the sphere. Defaults to the origin.
+        colours :: array_like (1,4) (optional)
+            The colours of each vertex. If shape (1,4) is provided then all
+            five vertices are the same colour. This class currently supports
+            only one colour. Default: WHITE.
+        n :: int (optional)
+            The number of subdivisions per 180 degree arc. Default: 8.
+    '''
+
     def __init__(self, radius, center=None, colours=None, n=8):
         self.radius = radius
         self.n = n
@@ -292,8 +320,10 @@ class QuickSphere4(Mesh4):
         # TODO: implement multi-coloured quickspheres
         if colours is None:
             colours = [WHITE]
-        # if len(colours) == 1:
-        #     colours = (2*n**2)*colours
+        if len(colours) == 1:
+            pass
+        else:
+            raise NotImplementedError
         self.colours = tensor(colours)
 
         super().__init__(center, [], [], [])
@@ -308,6 +338,18 @@ class QuickSphere4(Mesh4):
 
 
 class Cube4(Mesh4):
+    '''
+    A hypercube with arbitrary vertex locations. More like a hyper-
+    quadrilateral.
+
+    Args:
+        vertices :: array_like (16,4)
+            The vertex postitions of the hypercube.
+        colours :: array_like (16,4) or (1,4) (optional)
+            The colours of each vertex. If a shape (1,4) is provided then all
+            vertices are the same colour. Default: WHITE.
+    '''
+
     def __init__(self, vertices, colours=None):
         assert len(vertices) == 16
         if colour:
