@@ -72,6 +72,16 @@ class Mesh4:
         else:
             self.radii, self.means = tensor([]), tensor([])
 
+        vertex_data = GeomVertexData(repr(self),
+            GeomVertexFormat.getV3n3c4(), Geom.UHStatic)
+        vertex_data.setNumRows(0)
+        triangle_data = GeomTriangles(Geom.UHStatic)
+
+        self.geom = Geom(vertex_data)
+        self.geom.addPrimitive(triangle_data)
+        self.node = GeomNode(repr(self))
+        self.node.addGeom(self.geom)
+
     def __len__(self):
         return len(self.vertices)
 
@@ -148,7 +158,7 @@ class Mesh4:
             _tris = n_verts + torch.arange(len(_v_i)).view(-1, n)
             for i, j, k in combinations(range(n), 3):
                 triangles.append(_tris[:, (i, j, k)])
-                triangles.append(_tris[:, (i, k, j)])
+                # triangles.append(_tris[:, (i, k, j)])
 
         # project 4-vertices and 4-normals into 3-vertices and 3 normals onto
         # the hyperplane using the provided basis
@@ -158,7 +168,37 @@ class Mesh4:
         colours = torch.cat(colours)
         triangles = torch.cat(triangles)
 
-        return Mesh3(vertices, normals, colours, triangles)
+        ##############################################
+        # was in r3
+
+        vertices = vertices.cpu().numpy()
+        normals = normals.cpu().numpy()
+        colours = colours.cpu().numpy()
+        triangles = triangles.cpu().numpy()
+
+        vertex_data = GeomVertexData(repr(self),
+            GeomVertexFormat.getV3n3c4(), Geom.UHStatic)
+        vertex_data.setNumRows(4*len(self.tetrahedra))
+        triangle_data = GeomTriangles(Geom.UHStatic)
+
+        vertex_writer = GeomVertexWriter(vertex_data, 'vertex')
+        normal_writer = GeomVertexWriter(vertex_data, 'normal')
+        colour_writer = GeomVertexWriter(vertex_data, 'color')
+
+        for vertex in vertices:
+            vertex_writer.addData3(*vertex)
+
+        for normal in normals:
+            normal_writer.addData3(*normal)
+
+        for colour in colours:
+            colour_writer.addData4(*colour)
+
+        for triangle in triangles:
+            triangle_data.addVertices(*triangle)
+
+        self.geom.setVertexData(vertex_data)
+        self.geom.setPrimitive(0, triangle_data)
 
 
 class Simplex4(Mesh4):
@@ -206,7 +246,6 @@ class Simplex4(Mesh4):
                 normal.append(det)
 
             normal = torch.stack(normal)
-            print(normal)
             if 0 < normal.dot(vertex - center):
                 normal *= -1
             normals += 4*[normal]
@@ -240,7 +279,7 @@ class Terrain4(Mesh4):
 
 class Sphere4(Mesh4):
     def __init__(self, radius=1, colours=None, n=8):
-        center = np.array(center)
+        center = np.array([0,0,0,0])
         vertices, normals, tetrahedra = [], [], []
 
         if colours is None:

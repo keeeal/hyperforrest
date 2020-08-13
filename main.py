@@ -1,6 +1,6 @@
 
-import sys
-import random
+import os, sys, json
+from itertools import combinations
 
 import torch
 import numpy as np
@@ -11,73 +11,56 @@ from panda3d.core import loadPrcFile
 
 from utils.r4 import *
 from utils.colour import *
-from utils.math import *
-from utils.scene import *
 
-loadPrcFile('config/config.prc')
+loadPrcFile(os.path.join('config', 'config.prc'))
 
 
 class Game(ShowBase):
     def __init__(self):
         super().__init__()
 
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        print('Using', self.device)
+        self.gpu = None
+        # if torch.cuda.is_available():
+        #     self.gpu = torch.device('cuda')
 
-        self.shapes4 = []
+        self.slice = []
 
         for i in range(1):
-            # self.shapes4.append(
-            #     Simplex4(
-            #         3*torch.rand(5, 4) - 1,
-            #         # torch.eye(5, 4) + .01,
-            #         (
-            #             GREEN,
-            #             WHITE,
-            #             BLACK,
-            #             RED,
-            #             BLUE,
-            #         )
-            #     ).to(self.device)
-            # )
-            # self.shapes4.append(
-            #     QuickSphere4(1, torch.rand(4) + 1, n=12).to(self.device)
-            # )
-            self.shapes4.append(
-                Terrain4().to(self.device)
-            )
+            my_shape = Sphere4().to(self.gpu)
 
-        self.nodepaths = []
+            self.slice.append(my_shape)
+
+            my_node = my_shape.node
+            my_node_path = self.render.attachNewNode(my_node)
+            my_node_path.setTwoSided(True)
 
         self.view = Plane4(
             origin=(0, 0, 0, 0),
             normal=(0, 0, 0, 1),
             basis=torch.eye(4, 3),
-        ).to(self.device)
+        ).to(self.gpu)
 
-        self.set_view(self.view)
+        self.view_changed = True
 
-        directionalLight = DirectionalLight('directionalLight')
-        directionalLight.setColor((0.9, 0.9, 0.9, 1))
-        directionalLightNP = render.attachNewNode(directionalLight)
-        directionalLightNP.setHpr(180, -70, 0)
-        render.setLight(directionalLightNP)
+        controls = os.path.join('config', 'controls.json')
+        self.load_controls(controls)
 
-        self.keys = {
-            'q': False, 'w': False, 'e': False, 'a': False, 's': False, 'd': False,
-            'arrow_up': False, 'arrow_down': False, 'arrow_left': False, 'arrow_right': False,
-            'escape': False, 'control': False,
-        }
-        for key in self.keys:
-            self.accept(key, self.set_key, [key, True])
-            self.accept(key + '-up', self.set_key, [key, False])
-
-        self.set_camera(1, 1, 7)
+        self.set_camera(1, 1, 8)
         self.disable_mouse()
-        self.taskMgr.add(self.loop, 'loop')
+        self.taskMgr.add(self._loop, 'loop')
+        self.taskMgr.add(self._slice, 'slice')
 
     def set_key(self, key, value):
         self.keys[key] = value
+
+    def load_controls(self, controls):
+        self.keys, self.ctrl = {}, {}
+        with open(controls) as f:
+            for key, control in json.load(f).items():
+                self.keys[key] = False
+                self.ctrl[key] = getattr(self, control)
+                self.accept(key, self.set_key, [key, True])
+                self.accept(key + '-up', self.set_key, [key, False])
 
     def set_camera(self, theta=None, phi=None, radius=None):
         if theta is not None:
@@ -88,60 +71,76 @@ class Game(ShowBase):
             self.camera_radius = radius
         self.camera.set_pos(
             self.camera_radius * np.sin(self.camera_theta) *
-                np.cos(self.camera_phi),
+            np.cos(self.camera_phi),
             self.camera_radius * np.sin(self.camera_theta) *
-                np.sin(self.camera_phi),
+            np.sin(self.camera_phi),
             self.camera_radius * np.cos(self.camera_theta),
         )
         self.camera.look_at(0, 0, 0)
 
-    def set_view(self, view=None):
-        if view:
-            self.view = view
+    def turn_ana(self):
+        r = rotmat(+.05).to(self.gpu)
+        self.view.normal = norm(r.matmul(self.view.normal))
+        self.view.basis = norm(r.matmul(self.view.basis))
+        self.view_changed = True
 
-        for nodepath in self.nodepaths:
-            nodepath.remove_node()
-        self.nodepaths = []
+    def turn_kata(self):
+        r = rotmat(-.05).to(self.gpu)
+        self.view.normal = norm(r.matmul(self.view.normal))
+        self.view.basis = norm(r.matmul(self.view.basis))
+        self.view_changed = True
 
-        for t4 in self.shapes4:
-            t3 = t4.slice(self.view)
-            if t3:
-                node = t3.get_node()
-                nodepath = self.render.attach_new_node(node)
-                self.nodepaths.append(nodepath)
+    def walk_forward(self):
+        pass
 
-    def loop(self, task):
-        if self.keys['escape']:
-            sys.exit()
+    def walk_backwards(self):
+        pass
 
-        if self.keys['arrow_up']:
-            self.set_camera(theta=max(self.camera_theta - .1, 1*np.pi/8))
-        if self.keys['arrow_down']:
-            self.set_camera(theta=min(self.camera_theta + .1, 7*np.pi/8))
-        if self.keys['arrow_left']:
-            self.set_camera(phi=self.camera_phi - .1)
-        if self.keys['arrow_right']:
-            self.set_camera(phi=self.camera_phi + .1)
+    def walk_left(self):
+        pass
 
-        if self.keys['a']:
-            r = rotmat(+.05).to(self.device)
-            self.view.normal = norm(r.matmul(self.view.normal))
-            self.view.basis = norm(r.matmul(self.view.basis))
-            self.set_view()
-        if self.keys['d']:
-            r = rotmat(-.05).to(self.device)
-            self.view.normal = norm(r.matmul(self.view.normal))
-            self.view.basis = norm(r.matmul(self.view.basis))
-            self.set_view()
+    def walk_right(self):
+        pass
 
+    def camera_up(self):
+        self.set_camera(theta=max(self.camera_theta - .1, 1*np.pi/8))
+
+    def camera_down(self):
+        self.set_camera(theta=min(self.camera_theta + .1, 7*np.pi/8))
+
+    def camera_left(self):
+        self.set_camera(phi=self.camera_phi - .1)
+
+    def camera_right(self):
+        self.set_camera(phi=self.camera_phi + .1)
+
+    def close(self):
+        sys.exit()
+
+    def hyper(self):
+        pass
+
+    def _loop(self, task):
+        for key, pressed in self.keys.items():
+            if pressed:
+                self.ctrl[key]()
+
+        return task.cont
+
+    def _slice(self, task):
+        if self.view_changed:
+            for mesh in self.slice:
+                mesh.slice(self.view)
+
+        self.view_changed = False
         return task.cont
 
 
 def main():
-    with torch.no_grad():
-        game = Game()
-        game.run()
+    game = Game()
+    game.run()
 
 
 if __name__ == '__main__':
-    main()
+    with torch.no_grad():
+        main()
