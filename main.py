@@ -9,10 +9,16 @@ from direct.showbase.ShowBase import ShowBase
 from panda3d.core import DirectionalLight
 from panda3d.core import loadPrcFile
 
-from utils.r4 import *
-from utils.colour import *
+# from utils.r4 import *
+# from utils.colour import *
 
 loadPrcFile(os.path.join('config', 'config.prc'))
+
+
+class Simplex4():
+    def __init__(self, vertices):
+        super.__init__()
+
 
 
 class Game(ShowBase):
