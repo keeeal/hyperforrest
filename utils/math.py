@@ -2,6 +2,8 @@
 import torch
 import numpy as np
 
+from panda3d.core import Mat4
+
 
 def tensor(a, dtype=None, device=None):
     if isinstance(a, torch.Tensor): return a.to(device, dtype)
@@ -17,9 +19,9 @@ def norm(a, axis=0):
 
 
 def rotmat(theta):
-    m = torch.eye(4)
-    m[0, 0] = np.cos(theta)
-    m[0, 3] = -np.sin(theta)
-    m[3, 0] = np.sin(theta)
-    m[3, 3] = np.cos(theta)
-    return m
+    return Mat4(
+        (np.cos(theta), 0, 0, -np.sin(theta)),
+        (0, 1, 0, 0),
+        (0, 0, 1, 0),
+        (np.sin(theta), 0, 0, np.cos(theta)),
+    )

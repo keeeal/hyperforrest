@@ -1,9 +1,19 @@
 #version 430
 
-in vec4 p3d_Vertex;
+in vec4 vertex;
+in vec4 normal;
+in vec4 color;
 
-// pass-through vertex shader
+out VertexData
+{
+    vec4 vertex;
+    vec4 normal;
+    vec4 color;
+} vertex_data;
+
 void main()
 {
-    gl_Position = p3d_Vertex;
+    vertex_data.vertex = vertex;
+    vertex_data.normal = normal;
+    vertex_data.color = color;
 }

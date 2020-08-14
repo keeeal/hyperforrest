@@ -27,9 +27,9 @@ class Plane4:
 
     def __init__(self, origin, normal, basis):
         super().__init__()
-        self.origin = tensor(origin, dtype=torch.float)
-        self.normal = norm(tensor(normal, dtype=torch.float))
-        self.basis = norm(tensor(basis, dtype=torch.float))
+        self.origin = origin
+        self.normal = normal
+        self.basis = basis
 
     def to(self, device):
         return Plane4(
