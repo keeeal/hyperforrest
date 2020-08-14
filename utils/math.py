@@ -12,10 +12,10 @@ def norm(a, axis=0):
     return a/length(a, axis, keepdims=True)
 
 
-def rotmat(theta):
-    return Mat4(
-        (np.cos(theta), 0, 0, -np.sin(theta)),
-        (0, 1, 0, 0),
-        (0, 0, 1, 0),
-        (np.sin(theta), 0, 0, np.cos(theta)),
-    )
+def rotmat(theta, axis_1=0, axis_2=3):
+    m = np.eye(4)
+    m[axis_1, axis_1] = np.cos(theta)
+    m[axis_1, axis_2] = -np.sin(theta)
+    m[axis_2, axis_1] = np.sin(theta)
+    m[axis_2, axis_2] = np.cos(theta)
+    return Mat4(*m.flatten())

@@ -61,13 +61,13 @@ class Mesh4:
         self.n_vertices = len(vertices)
         self.n_tetrahedra = len(tetrahedra)
 
-        data = GeomVertexData(repr(self), format4, Geom.UHDynamic)
-        data.setNumRows(len(vertices))
-        primitive = GeomLinesAdjacency(Geom.UHDynamic)
+        self.data = GeomVertexData(repr(self), format4, Geom.UHDynamic)
+        self.data.setNumRows(len(vertices))
+        self.prim = GeomLinesAdjacency(Geom.UHDynamic)
 
-        vertex_writer = GeomVertexWriter(data, 'vertex')
-        normal_writer = GeomVertexWriter(data, 'normal')
-        colour_writer = GeomVertexWriter(data, 'colour')
+        vertex_writer = GeomVertexWriter(self.data, 'vertex')
+        normal_writer = GeomVertexWriter(self.data, 'normal')
+        colour_writer = GeomVertexWriter(self.data, 'colour')
 
         for vertex in vertices:
             vertex_writer.addData4(*vertex)
@@ -79,13 +79,13 @@ class Mesh4:
             colour_writer.addData4(*colour)
 
         for tetra in tetrahedra:
-            primitive.addVertices(*tetra)
-            primitive.closePrimitive()
+            self.prim.addVertices(*tetra)
+            self.prim.closePrimitive()
 
-        self.geometry = Geom(data)
-        self.geometry.addPrimitive(primitive)
+        self.geom = Geom(self.data)
+        self.geom.addPrimitive(self.prim)
         self.node = GeomNode(repr(self))
-        self.node.addGeom(self.geometry)
+        self.node.addGeom(self.geom)
 
     def __len__(self):
         return len(self.n_vertices)

@@ -12,6 +12,7 @@ from panda3d.core import Shader, Vec4
 from utils.r4 import *
 from utils.colour import *
 from utils.math import rotmat
+from utils.transform import *
 
 loadPrcFile(os.path.join('config', 'config.prc'))
 
@@ -21,8 +22,27 @@ class Game(ShowBase):
         super().__init__()
 
         my_shapes = [
-            Terrain4([.5, .5, .5], [10, 10, 10], scale=4, height=.5)
-        for i in range(1)]
+            Rotate(np.pi/4, 0, 1) (Simplex4(
+                np.eye(5,4),
+                (
+                    BLACK,
+                    WHITE,
+                    RED,
+                    GREEN,
+                    BLUE,
+                )
+            )),
+            Simplex4(
+                np.eye(5, 4),
+                (
+                    BLACK,
+                    WHITE,
+                    RED,
+                    GREEN,
+                    BLUE,
+                )
+            )
+        ]
 
         my_shader = Shader.load(Shader.SL_GLSL,
             vertex=os.path.join('slicer', 'slicer.vert'),

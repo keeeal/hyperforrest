@@ -1,12 +1,71 @@
 
-class Transform:
-    def to(device):
-        pass
+from panda3d.core import GeomVertexRewriter, Vec4
+
+from utils.math import rotmat
+
+
+class Scale:
+    '''
+    Scale a mesh along each axis.
+
+    Args:
+        v :: array_like (4,)
+            A vector of scale factors applied to each axis.
+    '''
+
+    def __init__(self, v):
+        self.v = Vec4(v)
+
+    def __call__(self, mesh):
+        vertex_writer = GeomVertexRewriter(mesh.data, 'vertex')
+        while not vertex_writer.isAtEnd():
+            vertex = vertex_writer.getData4()
+            vertex_writer.setData4(vertex * self.v)
+
+        return mesh
+
 
 class Translate:
-    def __init__(self, vector):
-        self.vector = tensor(vector)
+    '''
+    Move a mesh along the specified vector.
 
-    def __call__(self, *meshes):
-        for mesh in meshes:
-            mesh.vertices += self.vector
+    Args:
+        v :: array_like (4,)
+            The vector displacement of the mesh.
+    '''
+
+    def __init__(self, v):
+        self.v = Vec4(v)
+
+    def __call__(self, mesh):
+        vertex_writer = GeomVertexRewriter(mesh.data, 'vertex')
+        while not vertex_writer.isAtEnd():
+            vertex = vertex_writer.getData4()
+            vertex_writer.setData4(vertex + self.v)
+
+        return mesh
+
+
+class Rotate:
+    '''
+    Apply a simple rotation in 4D.
+
+    Args:
+        theta :: float
+            The rotation amount in radians.
+        axis_1 :: int
+            The index of the first axis in the plane of rotation.
+        axis_1 :: int
+            The index of the second axis in the plane of rotation.
+    '''
+
+    def __init__(self, theta, axis_1, axis_2):
+        self.m = rotmat(theta, axis_1, axis_2)
+
+    def __call__(self, mesh):
+        vertex_writer = GeomVertexRewriter(mesh.data, 'vertex')
+        while not vertex_writer.isAtEnd():
+            vertex = vertex_writer.getData4()
+            vertex_writer.setData4(self.m.xform(vertex))
+
+        return mesh
