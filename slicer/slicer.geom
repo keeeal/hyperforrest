@@ -1,7 +1,7 @@
 #version 430
 
 layout(lines_adjacency) in;
-layout(triangle_strip, max_vertices=5) out;
+layout(triangle_strip, max_vertices=6) out;
 
 uniform mat4 p3d_ModelViewProjectionMatrix;
 
@@ -13,10 +13,11 @@ in VertexData
 {
     vec4 vertex;
     vec4 normal;
-    vec4 color;
+    vec4 colour;
 } vertex_data[];
 
-out vec4 vertex_color;
+out vec4 vertex_normal;
+out vec4 vertex_colour;
 
 void main()
 {
@@ -39,48 +40,56 @@ void main()
     vec4 first_v;
     vec4 first_n;
     vec4 first_c;
-    bool first = true;
 
-    int n = 0;
-    float f[6];
+    int intersections = 0;
     for (int i = 0; i < 6; i ++)
     {
         vec4 v_a = vertex_data[a[i]].vertex;
         vec4 v_b = vertex_data[b[i]].vertex;
-        // vec4 n_a = vertex_data[a[i]].normal;
-        // vec4 n_b = vertex_data[b[i]].normal;
-        vec4 c_a = vertex_data[a[i]].color;
-        vec4 c_b = vertex_data[b[i]].color;
+        vec4 n_a = vertex_data[a[i]].normal;
+        vec4 n_b = vertex_data[b[i]].normal;
+        vec4 c_a = vertex_data[a[i]].colour;
+        vec4 c_b = vertex_data[b[i]].colour;
 
         // calculate f, the fraction of the line connecting a and b that lies
         // to a's side of the plane
         float v_a_dot_n = dot(v_a, plane_normal);
         float v_b_dot_n = dot(v_b, plane_normal);
         float f = (q_dot_n - v_a_dot_n)/(v_b_dot_n - v_a_dot_n);
-        // might need to check for infs and nans here ?
 
         if ((0 <= f) && (f < 1)) {
+
+            // find new vertex position
             vec4 v = mix(v_a, v_b, f);
-            vec4 c = mix(c_a, c_b, f);
             v = v * plane_basis;
-            v[3] = 1;
+            v.w = 1;
             v = p3d_ModelViewProjectionMatrix * v;
 
-            if (first) {
+            // find new normal
+            vec4 n = mix(n_a, n_b, f);
+            n = n * plane_basis;
+            n.w = 0;
+
+            // find new colour
+            vec4 c = mix(c_a, c_b, f);
+
+            if (intersections == 0) {
                 first_v = v;
+                first_n = n;
                 first_c = c;
-                first = false;
             }
 
+            intersections ++;
             gl_Position = v;
-            vertex_color = c;
+            vertex_colour = c;
+            vertex_normal = n;
             EmitVertex();
-            n ++;
         }
     }
-    if (3 < n) {
+    if (3 < intersections) {
         gl_Position = first_v;
-        vertex_color = first_c;
+        vertex_colour = first_c;
+        vertex_normal = first_n;
         EmitVertex();
     }
     EndPrimitive();

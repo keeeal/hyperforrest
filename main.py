@@ -1,75 +1,28 @@
 
 import os, sys, json
-from itertools import combinations
+from itertools import combinations, product
 
 import torch
 import numpy as np
 
 from direct.showbase.ShowBase import ShowBase
 from panda3d.core import loadPrcFile
-from panda3d.core import *
+from panda3d.core import Shader, Vec4
 
-from utils.r4 import Plane4
+from utils.r4 import *
 from utils.colour import *
 from utils.math import rotmat
 
 loadPrcFile(os.path.join('config', 'config.prc'))
 
-array = GeomVertexArrayFormat()
-array.addColumn("vertex", 4, Geom.NTFloat32, Geom.COther)
-array.addColumn("normal", 4, Geom.NTFloat32, Geom.COther)
-array.addColumn("color", 4, Geom.NTFloat32, Geom.CColor)
-
-formt = GeomVertexFormat()
-formt.addArray(array)
-
-formt = GeomVertexFormat.registerFormat(formt)
-
-class Simplex4():
-    def __init__(self, vertices, colors):
-        super().__init__()
-
-        vdata = GeomVertexData(repr(self), formt, Geom.UHDynamic)
-        vdata.setNumRows(5)
-
-        vertex = GeomVertexWriter(vdata, 'vertex')
-        normal = GeomVertexWriter(vdata, 'normal')
-        color = GeomVertexWriter(vdata, 'color')
-
-        for v in vertices:
-            vertex.addData4(*v)
-            normal.addData4(0, 0, 1, 0)
-
-        for c in colors:
-            color.addData4(*c)
-
-        prim = GeomLinesAdjacency(Geom.UHDynamic)
-
-        for t in combinations(range(5), 4):
-            prim.addVertices(*t)
-            prim.closePrimitive()
-
-        self.geom = Geom(vdata)
-        self.geom.addPrimitive(prim)
-
-        self.node = GeomNode(repr(self))
-        self.node.addGeom(self.geom)
 
 class Game(ShowBase):
     def __init__(self):
         super().__init__()
 
-        my_shapes = [Simplex4(
-            4*np.random.random((5, 4))-2,
-            # np.eye(5, 4) - .1,
-            (
-                GREEN,
-                WHITE,
-                BLACK,
-                RED,
-                BLUE,
-            ),
-        ) for i in range(1)]
+        my_shapes = [
+            Terrain4([.5, .5, .5], [10, 10, 10], scale=4, height=.5)
+        for i in range(1)]
 
         my_shader = Shader.load(Shader.SL_GLSL,
             vertex=os.path.join('slicer', 'slicer.vert'),
@@ -139,9 +92,6 @@ class Game(ShowBase):
             node_path.set_shader_input('plane_normal', self.view.normal)
             node_path.set_shader_input('plane_basis', self.view.basis)
 
-        print(self.view.normal)
-        print(self.view.basis)
-
     def turn_kata(self):
         r = rotmat(-.05)
         self.view.normal = r.xform(self.view.normal)
@@ -149,9 +99,6 @@ class Game(ShowBase):
         for node_path in self.node_paths:
             node_path.set_shader_input('plane_normal', self.view.normal)
             node_path.set_shader_input('plane_basis', self.view.basis)
-
-        print(self.view.normal)
-        print(self.view.basis)
 
     def walk_forward(self):
         pass

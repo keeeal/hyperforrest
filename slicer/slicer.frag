@@ -1,10 +1,11 @@
 #version 430
 
-in vec4 vertex_color;
+in vec4 vertex_colour;
+in vec4 vertex_normal;
 
-out vec4 color;
+out vec4 colour;
 
 void main()
 {
-    color = vertex_color;
+    colour = vertex_colour;
 }

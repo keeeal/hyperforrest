@@ -1,14 +1,23 @@
 
 from random import getrandbits
-from itertools import combinations
+from itertools import combinations, product
 
-import torch
 import numpy as np
 from opensimplex import OpenSimplex
+from panda3d.core import GeomVertexArrayFormat, GeomVertexFormat, GeomLinesAdjacency
 
 from utils.colour import WHITE
 from utils.math import *
 from utils.r3 import *
+
+array4 = GeomVertexArrayFormat()
+array4.addColumn("vertex", 4, Geom.NTFloat32, Geom.COther)
+array4.addColumn("normal", 4, Geom.NTFloat32, Geom.COther)
+array4.addColumn("colour", 4, Geom.NTFloat32, Geom.CColor)
+
+format4 = GeomVertexFormat()
+format4.addArray(array4)
+format4 = GeomVertexFormat.registerFormat(format4)
 
 
 class Plane4:
@@ -31,13 +40,6 @@ class Plane4:
         self.normal = normal
         self.basis = basis
 
-    def to(self, device):
-        return Plane4(
-            self.origin.to(device),
-            self.normal.to(device),
-            self.basis.to(device),
-        )
-
 
 class Mesh4:
     '''
@@ -45,160 +47,48 @@ class Mesh4:
 
     Args:
         vertices :: array_like (N,4)
-            A list of points in the mesh.
+            A list of vertex positions in the mesh.
         normals :: array_like (N,4)
-            A list of vectors perpendicular to the mesh at each vertex.
+            Vectors perpendicular to the mesh at each vertex.
         colours :: array_like (N,4)
-            A list of colours at each vertex.
+            The colour of each vertex.
         tetrahedra :: array_like (M,4)
             A list of indices that group vertices into 4-simplices.
     '''
 
     def __init__(self, vertices, normals, colours, tetrahedra):
         super().__init__()
-        self.vertices = tensor(vertices, dtype=torch.float)
-        self.normals = tensor(normals, dtype=torch.float)
-        self.colours = tensor(colours, dtype=torch.float)
-        self.tetrahedra = tensor(tetrahedra, dtype=torch.long)
-        self.device = None
+        self.n_vertices = len(vertices)
+        self.n_tetrahedra = len(tetrahedra)
 
-        # The average location and radial extent of each tetrahedron is stored
-        # to make slicing more efficient.
-        if len(tetrahedra):
-            self.means = self.vertices[self.tetrahedra].mean(axis=1, keepdims=True)
-            self.radii = self.vertices[self.tetrahedra] - self.means
-            self.radii = length(self.radii, axis=2).max(axis=1)[0]
-            self.means = self.means.squeeze(1)
-        else:
-            self.radii, self.means = tensor([]), tensor([])
+        data = GeomVertexData(repr(self), format4, Geom.UHDynamic)
+        data.setNumRows(len(vertices))
+        primitive = GeomLinesAdjacency(Geom.UHDynamic)
 
-        vertex_data = GeomVertexData(repr(self),
-            GeomVertexFormat.getV3n3c4(), Geom.UHStatic)
-        vertex_data.setNumRows(0)
-        triangle_data = GeomTriangles(Geom.UHStatic)
-
-        self.geom = Geom(vertex_data)
-        self.geom.addPrimitive(triangle_data)
-        self.node = GeomNode(repr(self))
-        self.node.addGeom(self.geom)
-
-    def __len__(self):
-        return len(self.vertices)
-
-    def to(self, device):
-        self.device = device
-        self.vertices = self.vertices.to(device)
-        self.normals = self.normals.to(device)
-        self.colours = self.colours.to(device)
-        self.tetrahedra = self.tetrahedra.to(device)
-        self.radii = self.radii.to(device)
-        self.means = self.means.to(device)
-        return self
-
-    def slice(self, plane):
-
-        # calculate how far from the plane each tetrahedron is
-        m_dot_n = self.means.matmul(plane.normal)
-        q_dot_n = plane.origin.matmul(plane.normal)
-
-        # only consider tetrahedra near the plane
-        nearby = (m_dot_n - q_dot_n).abs() < self.radii
-        nearby = self.tetrahedra[nearby]
-
-        # a and b are each pair of points in each tetrahedron
-        a = nearby[:, (0, 0, 1, 1, 2, 3)]
-        b = nearby[:, (1, 2, 2, 3, 3, 0)]
-
-        # calculate f: the fraction of the line connecting a and b that lies
-        # to one side of the plane
-        v_a_dot_n = self.vertices[a].matmul(plane.normal)
-        v_b_dot_n = self.vertices[b].matmul(plane.normal)
-        f = (q_dot_n - v_a_dot_n)/(v_b_dot_n - v_a_dot_n)
-        f[v_a_dot_n == q_dot_n] = 0
-
-        # from f, determine whether an intersection has occured and, if so,
-        # how many times each tetrahedron has been intersected
-        intersection = (0 <= f) * (f < 1)
-        intersection_count = intersection.sum(axis=1)
-
-        # prepare 3D data structures
-        vertices, normals, colours, triangles = [], [], [], []
-
-        # if the edges of a tetrahedron are intersected either 3 or 4 times
-        # it is visible
-        for n in 3, 4:
-            n_verts = sum(len(v) for v in vertices)
-
-            mask = intersection_count == n
-            _a, _b, _f = a[mask], b[mask], f[mask]
-            _i = intersection[mask]
-            _f_i = _f[_i].unsqueeze(1)
-
-            # calculate 4-vertex positions
-            _v_a_i = self.vertices[_a][_i]
-            _v_b_i = self.vertices[_b][_i]
-            _v_i = _v_a_i + _f_i*(_v_b_i - _v_a_i)
-            vertices.append(_v_i)
-
-            # calculate 4-normal for each vertex
-            _n_a_i = self.normals[_a][_i]
-            _n_b_i = self.normals[_b][_i]
-            _n_i = _n_a_i + _f_i*(_n_b_i - _n_a_i)
-            normals.append(_n_i)
-
-            # calculate the colour of each vertex
-            _c_a_i = self.colours[_a][_i]
-            _c_b_i = self.colours[_b][_i]
-            _c_i = _c_a_i + _f_i*(_c_b_i - _c_a_i)
-            colours.append(_c_i)
-
-            # there are two triangles added per set of three points i.e. front
-            # and back faces and eight triangles per quad
-            # TODO: there is no way this many triangles are needed
-            _tris = n_verts + torch.arange(len(_v_i)).view(-1, n)
-            for i, j, k in combinations(range(n), 3):
-                triangles.append(_tris[:, (i, j, k)])
-                # triangles.append(_tris[:, (i, k, j)])
-
-        # project 4-vertices and 4-normals into 3-vertices and 3 normals onto
-        # the hyperplane using the provided basis
-        vertices = torch.cat(vertices).matmul(plane.basis)
-        vertices -= plane.origin.matmul(plane.basis)
-        normals = norm(torch.cat(normals).matmul(plane.basis), axis=1)
-        colours = torch.cat(colours)
-        triangles = torch.cat(triangles)
-
-        ##############################################
-        # was in r3
-
-        vertices = vertices.cpu().numpy()
-        normals = normals.cpu().numpy()
-        colours = colours.cpu().numpy()
-        triangles = triangles.cpu().numpy()
-
-        vertex_data = GeomVertexData(repr(self),
-            GeomVertexFormat.getV3n3c4(), Geom.UHStatic)
-        vertex_data.setNumRows(4*len(self.tetrahedra))
-        triangle_data = GeomTriangles(Geom.UHStatic)
-
-        vertex_writer = GeomVertexWriter(vertex_data, 'vertex')
-        normal_writer = GeomVertexWriter(vertex_data, 'normal')
-        colour_writer = GeomVertexWriter(vertex_data, 'color')
+        vertex_writer = GeomVertexWriter(data, 'vertex')
+        normal_writer = GeomVertexWriter(data, 'normal')
+        colour_writer = GeomVertexWriter(data, 'colour')
 
         for vertex in vertices:
-            vertex_writer.addData3(*vertex)
+            vertex_writer.addData4(*vertex)
 
         for normal in normals:
-            normal_writer.addData3(*normal)
+            normal_writer.addData4(*normal)
 
         for colour in colours:
             colour_writer.addData4(*colour)
 
-        for triangle in triangles:
-            triangle_data.addVertices(*triangle)
+        for tetra in tetrahedra:
+            primitive.addVertices(*tetra)
+            primitive.closePrimitive()
 
-        self.geom.setVertexData(vertex_data)
-        self.geom.setPrimitive(0, triangle_data)
+        self.geometry = Geom(data)
+        self.geometry.addPrimitive(primitive)
+        self.node = GeomNode(repr(self))
+        self.node.addGeom(self.geometry)
+
+    def __len__(self):
+        return len(self.n_vertices)
 
 
 class Simplex4(Mesh4):
@@ -215,46 +105,46 @@ class Simplex4(Mesh4):
 
     def __init__(self, vertices, colours=None):
         assert len(vertices) == 5
-
         if not colours:
             colours = [WHITE]
         if len(colours) == 1:
             colours = 5*colours
-        colours = tensor(colours)
 
-        # combos is a list of containing one tensor for each vertex in
-        # which the other four vertices are stored
-        vertices = tensor(vertices, dtype=torch.float)
-        center = vertices.mean(axis=0, keepdim=True)[0]
-        combos = [torch.stack(i) for i in combinations(vertices, 4)]
-        combos.reverse()
+        vertices = np.array(vertices)
+        center = vertices.mean(axis=0)
+
+        # groups is a list containing, for each vertex, an array of the other
+        # four vertices
+        groups = [np.stack(i) for i in combinations(vertices, 4)]
 
         # the normal for each tetrahedron is a vector perpedicular found using
         # the determinant (https://math.stackexchange.com/questions/904172) and
-        # then directed away from the remaining vertex not in the tetrahedron
+        # then directed away from the center
         normals = []
-        for vertex, combo in zip(vertices, combos):
+        for group in groups:
 
             normal = []
-            combo = combo - combo[0]
+            first = group[0]
+            group = group - first
             for n in range(4):
                 cols = list(range(4))
                 cols.remove(n)
-                det = torch.det(combo[1:, cols])
+                det = np.linalg.det(group[1:, cols])
                 if n % 2:
                     det *= -1
                 normal.append(det)
 
-            normal = torch.stack(normal)
-            if 0 < normal.dot(vertex - center):
+            normal = np.stack(normal)
+            if normal.dot(first - center) < 0:
                 normal *= -1
             normals += 4*[normal]
 
-        vertices = torch.cat(combos)
-        normals = norm(torch.stack(normals), axis=1)
-        colours = [torch.stack(i) for i in combinations(colours, 4)]
-        colours = torch.cat(colours[::-1])
-        tetrahedra = torch.arange(20).view(5, 4)
+        # prepare mesh data
+        vertices = np.concatenate(groups)
+        normals = norm(np.stack(normals), axis=1)
+        colours = [np.stack(i) for i in combinations(colours, 4)]
+        colours = np.concatenate(colours)
+        tetrahedra = np.arange(20).reshape(5, 4)
 
         super().__init__(vertices, normals, colours, tetrahedra)
 
@@ -266,114 +156,130 @@ class Terrain4(Mesh4):
     Args:
     '''
 
-    def __init__(self, size, scale=1, seed=None):
+    def __init__(self, size, shape, scale=1, height=1, colours=None, seed=None):
+        if colours is None:
+            colours = [WHITE]
+        if len(colours) == 1:
+            colours = np.prod(shape)*colours
+
         if seed is None:
             seed = getrandbits(32)
-
         self.noise = OpenSimplex(seed).noise3d
-        super().__init__([], [], [], [])
 
-    def slice(self, plane):
-        pass
+        # TODO: Is there a better way of sampling the noise? Perhaps radially
+
+        x = np.arange(shape[0])
+        y = np.arange(shape[1])
+        w = np.arange(shape[2])
+
+        x, y, w = np.meshgrid(x, y, w)
+
+        odd = (x + y + w) % 2 == 1
+        even = (odd + 1) % 2 == 1
+
+        odd, even = odd[:-1, :-1, :-1], even[:-1, :-1, :-1]
+
+        z = []
+        x, y, w = x.flatten(), y.flatten(), w.flatten()
+        for i, j, k in zip(x, y, w):
+            z.append(height*(self.noise(i/scale, j/scale, k/scale) + 1)/2)
+
+        x = size[0] * x
+        y = size[1] * y
+        w = size[2] * w
+
+        vertices = np.stack((x, y, z, w), axis=1)
+
+        t = np.arange(np.prod(shape)).reshape(shape)
+
+        t_0 = t[:-1, :-1, :-1][even]
+        t_1 = t[:-1, :-1, 1:][even]
+        t_2 = t[:-1, 1:, :-1][even]
+        t_3 = t[:-1, 1:, 1:][even]
+        t_4 = t[1:, :-1, :-1][even]
+        t_5 = t[1:, :-1, 1:][even]
+        t_6 = t[1:, 1:, :-1][even]
+        t_7 = t[1:, 1:, 1:][even]
+
+        print(t_0.shape)
+
+        even = np.concatenate((
+            np.stack((t_0, t_1, t_2, t_4), axis=1),
+            np.stack((t_1, t_2, t_3, t_7), axis=1),
+            np.stack((t_1, t_2, t_4, t_7), axis=1),
+            np.stack((t_1, t_4, t_5, t_7), axis=1),
+            np.stack((t_2, t_4, t_6, t_7), axis=1),
+        ))
+
+        t_0 = t[:-1, :-1, :-1][odd]
+        t_1 = t[:-1, :-1, 1:][odd]
+        t_2 = t[:-1, 1:, :-1][odd]
+        t_3 = t[:-1, 1:, 1:][odd]
+        t_4 = t[1:, :-1, :-1][odd]
+        t_5 = t[1:, :-1, 1:][odd]
+        t_6 = t[1:, 1:, :-1][odd]
+        t_7 = t[1:, 1:, 1:][odd]
+
+        odd = np.concatenate((
+            np.stack((t_7, t_6, t_5, t_3), axis=1),
+            np.stack((t_6, t_5, t_4, t_0), axis=1),
+            np.stack((t_6, t_5, t_3, t_0), axis=1),
+            np.stack((t_6, t_3, t_2, t_0), axis=1),
+            np.stack((t_5, t_3, t_1, t_0), axis=1),
+        ))
+
+        tetrahedra = np.concatenate((even, odd))
+
+        print(tetrahedra.shape)
+
+        normals = np.prod(shape)*[(0, 0, 1, 0)]
+
+        super().__init__(vertices, normals, colours, tetrahedra)
 
 
 class Sphere4(Mesh4):
-    def __init__(self, radius=1, colours=None, n=8):
-        center = np.array([0,0,0,0])
-        vertices, normals, tetrahedra = [], [], []
+    def __init__(self, radius=1, colours=None, n=16):
+        # TODO: Is there a better way of triangulating a hypersphere?
 
         if colours is None:
             colours = [WHITE]
         if len(colours) == 1:
             colours = (2*n**3)*colours
-        colours = tensor(colours)
 
-        # TODO: Convert this into vectorized opertaions
+        theta = np.linspace(0, np.pi, n)
+        phi = np.linspace(0, np.pi, n)
+        omega = np.linspace(0, 2*np.pi, n)
 
-        for theta in np.linspace(0, np.pi, n):
-            for phi in np.linspace(0, np.pi, n):
-                for omega in np.linspace(0, 2*np.pi, 2*n):
-                    x = np.cos(theta)
-                    y = np.sin(theta)*np.cos(phi)
-                    z = np.sin(theta)*np.sin(phi)*np.cos(omega)
-                    w = np.sin(theta)*np.sin(phi)*np.sin(omega)
-                    vertices.append(center + radius*np.array((x, y, z, w)))
-                    normals.append((x, y, z, w))
+        theta, phi, omega = np.meshgrid(theta, phi, omega)
 
-        for i in range(n-1):
-            for j in range(n-1):
-                for k in range(2*n-1):
-                    if (i + j + k) % 2:
-                        tetrahedra.append(list(np.ravel_multi_index(
-                            ((i, i+1, i, i), (j, j, j+1, j), (k, k, k, k+1)), (n, n, 2*n))))
-                        tetrahedra.append(list(np.ravel_multi_index(
-                            ((i+1, i+1, i, i), (j+1, j, j+1, j), (k+1, k, k, k+1)), (n, n, 2*n))))
-                        tetrahedra.append(list(np.ravel_multi_index(
-                            ((i+1, i, i+1, i+1), (j, j+1, j+1, j+1), (k, k, k, k+1)), (n, n, 2*n))))
-                        tetrahedra.append(list(np.ravel_multi_index(
-                            ((i, i+1, i+1, i+1), (j, j, j, j+1), (k+1, k, k+1, k+1)), (n, n, 2*n))))
-                        tetrahedra.append(list(np.ravel_multi_index(
-                            ((i, i, i, i+1), (j+1, j, j+1, j+1), (k, k+1, k+1, k+1)), (n, n, 2*n))))
-                    else:
-                        tetrahedra.append(list(np.ravel_multi_index(
-                            ((i, i+1, i+1, i+1), (j, j, j+1, j), (k, k, k, k+1)), (n, n, 2*n))))
-                        tetrahedra.append(list(np.ravel_multi_index(
-                            ((i, i, i+1, i), (j, j+1, j+1, j+1), (k, k, k, k+1)), (n, n, 2*n))))
-                        tetrahedra.append(list(np.ravel_multi_index(
-                            ((i, i, i+1, i), (j, j, j, j+1), (k, k+1, k+1, k+1)), (n, n, 2*n))))
-                        tetrahedra.append(list(np.ravel_multi_index(
-                            ((i, i+1, i+1, i), (j, j+1, j, j+1), (k, k, k+1, k+1)), (n, n, 2*n))))
-                        tetrahedra.append(list(np.ravel_multi_index(
-                            ((i+1, i+1, i+1, i), (j+1, j+1, j, j+1), (k+1, k, k+1, k+1)), (n, n, 2*n))))
+        x = np.cos(theta)
+        y = np.sin(theta)*np.cos(phi)
+        z = np.sin(theta)*np.sin(phi)*np.cos(omega)
+        w = np.sin(theta)*np.sin(phi)*np.sin(omega)
+        x, y, z, w = x.flatten(), y.flatten(), z.flatten(), w.flatten()
+
+        normals = np.stack((x, y, z, w), axis=1)
+        vertices = radius*normals# + center
+
+        t = np.arange(len(vertices)).reshape(theta.shape)
+        t_0 = t[:-1, :-1, :-1].flatten()
+        t_1 = t[:-1, :-1, 1:].flatten()
+        t_2 = t[:-1, 1:, :-1].flatten()
+        t_3 = t[:-1, 1:, 1:].flatten()
+        t_4 = t[1:, :-1, :-1].flatten()
+        t_5 = t[1:, :-1, 1:].flatten()
+        t_6 = t[1:, 1:, :-1].flatten()
+        t_7 = t[1:, 1:, 1:].flatten()
+
+        tetrahedra = np.concatenate((
+            np.stack((t_0, t_1, t_2, t_4), axis=1),
+            np.stack((t_1, t_2, t_3, t_7), axis=1),
+            np.stack((t_1, t_2, t_4, t_7), axis=1),
+            np.stack((t_1, t_4, t_5, t_7), axis=1),
+            np.stack((t_2, t_4, t_6, t_7), axis=1),
+        ))
 
         super().__init__(vertices, normals, colours, tetrahedra)
-
-
-class QuickSphere4(Mesh4):
-    '''
-    A 4-sphere stored as a center and a radius. This class overrides the usual
-    slice method to take advantage of the fact that a sliced 4-sphere is always
-    a 3-sphere of known position and radius.
-
-    Args:
-        radius :: float
-            The radius of the 4-sphere.
-        center :: array_like (4,) (optional)
-            The position of the sphere. Defaults to the origin.
-        colours :: array_like (1,4) (optional)
-            The colours of each vertex. If shape (1,4) is provided then all
-            five vertices are the same colour. This class currently supports
-            only one colour. Default: WHITE.
-        n :: int (optional)
-            The number of subdivisions per 180 degree arc. Default: 8.
-    '''
-
-    def __init__(self, radius, center=None, colours=None, n=8):
-        self.radius = radius
-        self.n = n
-
-        if center is None:
-            center = [0, 0, 0, 0]
-        center = tensor(center).view(-1, 4)
-
-        # TODO: implement multi-coloured quickspheres
-        if colours is None:
-            colours = [WHITE]
-        if len(colours) == 1:
-            pass
-        else:
-            raise NotImplementedError
-        self.colours = tensor(colours)
-
-        super().__init__(center, [], [], [])
-
-    def slice(self, plane):
-        distance = self.vertices.matmul(plane.normal).abs().item()
-        if distance < self.radius:
-            radius = np.sqrt(self.radius**2 - distance**2)
-            center = self.vertices.matmul(plane.basis)
-            n = int(radius*self.n/self.radius)
-            return Sphere3(radius, center, self.colours, n)
 
 
 class Cube4(Mesh4):
@@ -391,22 +297,11 @@ class Cube4(Mesh4):
 
     def __init__(self, vertices, colours=None):
         assert len(vertices) == 16
-        if colour:
-            assert len(colour) == 16
-        else:
-            colour = 16*[WHITE]
+        if colours is None:
+            colours = [WHITE]
+        if len(colours) == 1:
+            colours = 16*colours
 
-        keys = list(product(*4*[(0, 1)]))
-
-        for key in keys:
-            if not sum(key) % 2:
-                neighbours = []
-                for i in range(4):
-                    neighbours.append(list(key))
-                    neighbours[-1][i] = int(not neighbours[-1][i])
-
-
-
-
+        # TODO: triangulation magic here
 
         super().__init__(vertices, normals, colours, tetrahedra)
