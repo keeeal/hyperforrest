@@ -8,6 +8,7 @@ import numpy as np
 from direct.showbase.ShowBase import ShowBase
 from panda3d.core import loadPrcFile
 from panda3d.core import Shader, Vec4
+from panda3d.core import *
 
 from utils.r4 import *
 from utils.colour import *
@@ -16,33 +17,31 @@ from utils.transform import *
 
 loadPrcFile(os.path.join('config', 'config.prc'))
 
+# pipeline_path = '/home/j/RenderPipeline/'
+# sys.path.insert(0, pipeline_path)
+# from rpcore import RenderPipeline
+
 
 class Game(ShowBase):
     def __init__(self):
         super().__init__()
 
+        # self.render_pipeline = RenderPipeline()
+        # self.render_pipeline.create(self)
+        # self.render_pipeline.daytime_mgr.time = "11:25"
+
+        # self.render_pipeline.set_effect(
+        #     render, "scene-effect.yaml", {}, sort=250)
+
+
         my_shapes = [
-            Rotate(np.pi/4, 0, 1) (Simplex4(
-                np.eye(5,4),
-                (
-                    BLACK,
-                    WHITE,
-                    RED,
-                    GREEN,
-                    BLUE,
-                )
-            )),
-            Simplex4(
-                np.eye(5, 4),
-                (
-                    BLACK,
-                    WHITE,
-                    RED,
-                    GREEN,
-                    BLUE,
-                )
-            )
+            # Translate((-2.1,-2.1,0,-2.1)) (Terrain4([.4, .4, .4], [10, 10, 10], scale=5, height=1)),
+            RandSphere(1, 10000)
         ]
+
+        my_material = Material()
+        # my_material.setShininess(5.0)  # Make this material shiny
+        # my_material.setBaseColor((0, 0, 1, 1))  # Make this material blue
 
         my_shader = Shader.load(Shader.SL_GLSL,
             vertex=os.path.join('slicer', 'slicer.vert'),
@@ -65,6 +64,8 @@ class Game(ShowBase):
             node_path.set_shader(my_shader)
             node_path.setTwoSided(True)
 
+            node_path.setMaterial(my_material)
+
             node_path.set_shader_input('plane_origin', self.view.origin)
             node_path.set_shader_input('plane_normal', self.view.normal)
             node_path.set_shader_input('plane_basis', self.view.basis)
@@ -75,6 +76,17 @@ class Game(ShowBase):
         self.set_camera(1, 1, 8)
         self.disable_mouse()
         self.taskMgr.add(self._loop, 'loop')
+
+        # Create some lighting
+        ambientLight = AmbientLight("ambientLight")
+        ambientLight.setColor(Vec4(.3, .3, .3, 1))
+        self.render.setLight(self.render.attachNewNode(ambientLight))
+
+        directionalLight = DirectionalLight("directionalLight")
+        directionalLight.setDirection(Vec3(-5, -5, -5))
+        directionalLight.setColor(Vec4(1, 1, 1, 1))
+        directionalLight.setSpecularColor(Vec4(1, 1, 1, 1))
+        self.render.setLight(self.render.attachNewNode(directionalLight))
 
     def set_key(self, key, value):
         self.keys[key] = value

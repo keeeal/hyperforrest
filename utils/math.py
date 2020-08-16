@@ -4,7 +4,6 @@ from panda3d.core import Mat4
 
 
 def length(a, axis=0, keepdims=False):
-    print((a**2).sum)
     return (a**2).sum(axis, keepdims=keepdims)**.5
 
 

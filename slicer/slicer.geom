@@ -3,7 +3,9 @@
 layout(lines_adjacency) in;
 layout(triangle_strip, max_vertices=6) out;
 
-uniform mat4 p3d_ModelViewProjectionMatrix;
+uniform mat4 p3d_ProjectionMatrix;
+uniform mat4 p3d_ModelViewMatrix;
+uniform mat3 p3d_NormalMatrix;
 
 uniform vec4 plane_origin;
 uniform vec4 plane_normal;
@@ -16,8 +18,12 @@ in VertexData
     vec4 colour;
 } vertex_data[];
 
-out vec4 vertex_normal;
-out vec4 vertex_colour;
+out FragmentData
+{
+    vec4 vertex;
+    vec3 normal;
+    vec4 colour;
+} fragment_data;
 
 void main()
 {
@@ -37,9 +43,9 @@ void main()
     int a[6] = {0, 0, 1, 1, 2, 3};
     int b[6] = {1, 2, 2, 3, 3, 0};
 
-    vec4 first_v;
-    vec4 first_n;
-    vec4 first_c;
+    vec4 first_vertex;
+    vec3 first_normal;
+    vec4 first_colour;
 
     int intersections = 0;
     for (int i = 0; i < 6; i ++)
@@ -62,34 +68,38 @@ void main()
             // find new vertex position
             vec4 v = mix(v_a, v_b, f);
             v = v * plane_basis;
-            v.w = 1;
-            v = p3d_ModelViewProjectionMatrix * v;
 
             // find new normal
             vec4 n = mix(n_a, n_b, f);
             n = n * plane_basis;
-            n.w = 0;
 
             // find new colour
             vec4 c = mix(c_a, c_b, f);
 
+            fragment_data.vertex = p3d_ModelViewMatrix * vec4(v.xyz, 1);
+            fragment_data.normal = p3d_NormalMatrix * n.xyz;
+            fragment_data.colour = c;
+
             if (intersections == 0) {
-                first_v = v;
-                first_n = n;
-                first_c = c;
+                first_vertex = fragment_data.vertex;
+                first_normal = fragment_data.normal;
+                first_colour = fragment_data.colour;
             }
 
+            gl_Position = p3d_ProjectionMatrix * fragment_data.vertex;
             intersections ++;
-            gl_Position = v;
-            vertex_colour = c;
-            vertex_normal = n;
+
             EmitVertex();
         }
     }
     if (3 < intersections) {
-        gl_Position = first_v;
-        vertex_colour = first_c;
-        vertex_normal = first_n;
+
+        fragment_data.vertex = first_vertex;
+        fragment_data.normal = first_normal;
+        fragment_data.colour = first_colour;
+
+        gl_Position = p3d_ProjectionMatrix * fragment_data.vertex;
+
         EmitVertex();
     }
     EndPrimitive();

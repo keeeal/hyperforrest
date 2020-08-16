@@ -3,6 +3,7 @@ from random import getrandbits
 from itertools import combinations, product
 
 import numpy as np
+from scipy.spatial import ConvexHull
 from opensimplex import OpenSimplex
 from panda3d.core import GeomVertexArrayFormat, GeomVertexFormat, GeomLinesAdjacency
 
@@ -91,6 +92,48 @@ class Mesh4:
         return len(self.n_vertices)
 
 
+class Hull4(Mesh4):
+    def __init__(self, vertices, colours):
+        if not colours:
+            colours = [WHITE]
+        if len(colours) == 1:
+            colours = len(vertices)*colours
+        colours = np.array(colours)
+
+        center = vertices.mean(axis=0)
+        hull = ConvexHull(vertices).simplices
+
+        normals = []
+        for t in hull:
+            _t = vertices[t]
+
+            normal = []
+            first = _t[0]
+            _t = _t - first
+
+            for n in range(4):
+                cols = list(range(4))
+                cols.remove(n)
+                det = np.linalg.det(_t[1:, cols])
+                if n % 2:
+                    det *= -1
+                normal.append(det)
+
+            normal = np.stack(normal)
+            if normal.dot(first - center) < 0:
+                normal *= -1
+
+            normals += 4*[normal]
+
+        print(colours)
+
+        vertices = np.concatenate([vertices[t] for t in hull])
+        normals = norm(np.stack(normals), axis=1)
+        colours = np.concatenate([colours[t] for t in hull])
+        tetrahedra = np.arange(len(vertices)).reshape(-1, 4)
+
+        super().__init__(vertices, normals, colours, tetrahedra)
+
 class Simplex4(Mesh4):
     '''
     A 4-simplex, the simplest 4D shape.
@@ -161,6 +204,8 @@ class Terrain4(Mesh4):
             colours = [WHITE]
         if len(colours) == 1:
             colours = np.prod(shape)*colours
+            # colours = [[*np.random.random(3)] + [1]
+            #            for i in range(np.prod(shape))]
 
         if seed is None:
             seed = getrandbits(32)
@@ -201,8 +246,6 @@ class Terrain4(Mesh4):
         t_6 = t[1:, 1:, :-1][even]
         t_7 = t[1:, 1:, 1:][even]
 
-        print(t_0.shape)
-
         even = np.concatenate((
             np.stack((t_0, t_1, t_2, t_4), axis=1),
             np.stack((t_1, t_2, t_3, t_7), axis=1),
@@ -230,7 +273,7 @@ class Terrain4(Mesh4):
 
         tetrahedra = np.concatenate((even, odd))
 
-        print(tetrahedra.shape)
+        # print(tetrahedra.shape)
 
         normals = np.prod(shape)*[(0, 0, 1, 0)]
 
@@ -238,7 +281,7 @@ class Terrain4(Mesh4):
 
 
 class Sphere4(Mesh4):
-    def __init__(self, radius=1, colours=None, n=16):
+    def __init__(self, r=1, n=16, colours=None):
         # TODO: Is there a better way of triangulating a hypersphere?
 
         if colours is None:
@@ -259,7 +302,7 @@ class Sphere4(Mesh4):
         x, y, z, w = x.flatten(), y.flatten(), z.flatten(), w.flatten()
 
         normals = np.stack((x, y, z, w), axis=1)
-        vertices = radius*normals# + center
+        vertices = r*normals
 
         t = np.arange(len(vertices)).reshape(theta.shape)
         t_0 = t[:-1, :-1, :-1].flatten()
@@ -282,7 +325,7 @@ class Sphere4(Mesh4):
         super().__init__(vertices, normals, colours, tetrahedra)
 
 
-class Cube4(Mesh4):
+class Cube4(Hull4):
     '''
     A hypercube with arbitrary vertex locations. More like a hyper-
     quadrilateral.
@@ -302,6 +345,19 @@ class Cube4(Mesh4):
         if len(colours) == 1:
             colours = 16*colours
 
-        # TODO: triangulation magic here
+        super().__init__(vertices, colours)
 
-        super().__init__(vertices, normals, colours, tetrahedra)
+
+class RandSphere(Hull4):
+    def __init__(self, r, n):
+
+        vertices = []
+        while len(vertices) < n:
+            vertex = 2 * np.random.random(4) - 1
+            if length(vertex) < 1:
+                vertices.append(r * norm(vertex))
+
+        vertices = np.stack(vertices)
+        colours = [(114/255, 45/255, 175/255, 1)]
+
+        super().__init__(vertices, colours)
