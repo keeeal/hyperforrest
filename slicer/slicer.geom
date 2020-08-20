@@ -8,7 +8,6 @@ uniform mat4 p3d_ModelViewMatrix;
 uniform mat3 p3d_NormalMatrix;
 
 uniform vec4 plane_origin;
-uniform vec4 plane_normal;
 uniform mat4 plane_basis;
 
 in VertexData
@@ -30,9 +29,9 @@ void main()
     vec4 v_dot_n;
     for (int i = 0; i < 4; i ++)
     {
-        v_dot_n[i] = dot(vertex_data[i].vertex, plane_normal);
+        v_dot_n[i] = dot(vertex_data[i].vertex, plane_basis[3]);
     }
-    float q_dot_n = dot(plane_origin, plane_normal);
+    float q_dot_n = dot(plane_origin, plane_basis[3]);
 
     // view plane culling
     vec4 _q = {q_dot_n, q_dot_n, q_dot_n, q_dot_n};
@@ -59,8 +58,8 @@ void main()
 
         // calculate f, the fraction of the line connecting a and b that lies
         // to a's side of the plane
-        float v_a_dot_n = dot(v_a, plane_normal);
-        float v_b_dot_n = dot(v_b, plane_normal);
+        float v_a_dot_n = dot(v_a, plane_basis[3]);
+        float v_b_dot_n = dot(v_b, plane_basis[3]);
         float f = (q_dot_n - v_a_dot_n)/(v_b_dot_n - v_a_dot_n);
 
         if ((0 <= f) && (f < 1)) {

@@ -4,44 +4,82 @@ from itertools import combinations, product
 
 import torch
 import numpy as np
+from numpy.random import random as rand
 
 from direct.showbase.ShowBase import ShowBase
 from panda3d.core import loadPrcFile
-from panda3d.core import Shader, Vec4
 from panda3d.core import *
 
 from utils.r4 import *
 from utils.colour import *
-from utils.math import rotmat
+from utils.math import *
 from utils.transform import *
 
 loadPrcFile(os.path.join('config', 'config.prc'))
-
-# pipeline_path = '/home/j/RenderPipeline/'
-# sys.path.insert(0, pipeline_path)
-# from rpcore import RenderPipeline
 
 
 class Game(ShowBase):
     def __init__(self):
         super().__init__()
 
-        # self.render_pipeline = RenderPipeline()
-        # self.render_pipeline.create(self)
-        # self.render_pipeline.daytime_mgr.time = "11:25"
+        my_shapes = []
 
-        # self.render_pipeline.set_effect(
-        #     render, "scene-effect.yaml", {}, sort=250)
+        my_shapes.append(
+            Translate((-5, -5, 0, -5))(
+                Terrain4([10, 10, 10], .3, 1.2, n=1000,
+                         colours=[(215/255, 164/255, 101/255, 1)])
+            )
+        )
+
+        my_shapes.append(
+            Translate((-5, -5, -.3, -5))(
+                Terrain4([10, 10, 10], .3, .1, n=1000,
+                         colours=[(71/255, 142/255, 172/255, 1)])
+            )
+        )
+
+        trunk = []
+        for i in range(20):
+            v = norm(2 * rand(4) - 1)/5
+            v[2] = 0
+            trunk.append(v)
+        for i in range(10):
+            v = norm(2 * rand(4) - 1)/8
+            v[2] = 1
+            trunk.append(v)
 
 
-        my_shapes = [
-            # Translate((-2.1,-2.1,0,-2.1)) (Terrain4([.4, .4, .4], [10, 10, 10], scale=5, height=1)),
-            RandSphere(1, 10000)
-        ]
+        my_shapes.append(
+            Rotate(.1, 1, 2)(
+                Hull4(trunk, colours=[(188/255, 115/255, 106/255, 1)])
+            )
+        )
 
-        my_material = Material()
-        # my_material.setShininess(5.0)  # Make this material shiny
-        # my_material.setBaseColor((0, 0, 1, 1))  # Make this material blue
+        my_shapes.append(
+            Translate((0, 0, 1, 0))(
+                Rotate(.3, 1, 2)(
+                    Scale((1, 1, .2, 1))(
+                        Hull4(trunk, colours=[(188/255, 115/255, 106/255, 1)])
+                    )
+                )
+            )
+        )
+
+        my_shapes.append(
+            Translate((0, 0, 1, 0))(
+                Rotate(-.2, 1, 2)(
+                    Scale((1, 1, .2, 1))(
+                        Hull4(trunk, colours=[(188/255, 115/255, 106/255, 1)])
+                    )
+                )
+            )
+        )
+
+        # my_shapes.append(
+        #     Translate((-2, -2, 0, -2))(
+        #         Sphere4(1, n=100, colours=[RED])
+        #     )
+        # )
 
         my_shader = Shader.load(Shader.SL_GLSL,
             vertex=os.path.join('slicer', 'slicer.vert'),
@@ -50,7 +88,6 @@ class Game(ShowBase):
 
         self.view = Plane4(
             Vec4(0, 0, 0, 0),
-            Vec4(0, 0, 0, 1),
             Mat4(
                 (1, 0, 0, 0),
                 (0, 1, 0, 0),
@@ -60,20 +97,18 @@ class Game(ShowBase):
         )
 
         self.node_paths = [render.attachNewNode(s.node) for s in my_shapes]
+
         for node_path in self.node_paths:
             node_path.set_shader(my_shader)
             node_path.setTwoSided(True)
 
-            node_path.setMaterial(my_material)
-
             node_path.set_shader_input('plane_origin', self.view.origin)
-            node_path.set_shader_input('plane_normal', self.view.normal)
             node_path.set_shader_input('plane_basis', self.view.basis)
 
         controls = os.path.join('config', 'controls.json')
         self.load_controls(controls)
 
-        self.set_camera(1, 1, 8)
+        self.set_camera(1, 1, 16)
         self.disable_mouse()
         self.taskMgr.add(self._loop, 'loop')
 
@@ -118,18 +153,14 @@ class Game(ShowBase):
 
     def turn_ana(self):
         r = rotmat(+.05)
-        self.view.normal = r.xform(self.view.normal)
         self.view.basis = r * self.view.basis
         for node_path in self.node_paths:
-            node_path.set_shader_input('plane_normal', self.view.normal)
             node_path.set_shader_input('plane_basis', self.view.basis)
 
     def turn_kata(self):
         r = rotmat(-.05)
-        self.view.normal = r.xform(self.view.normal)
         self.view.basis = r * self.view.basis
         for node_path in self.node_paths:
-            node_path.set_shader_input('plane_normal', self.view.normal)
             node_path.set_shader_input('plane_basis', self.view.basis)
 
     def walk_forward(self):

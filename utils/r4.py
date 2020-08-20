@@ -1,11 +1,12 @@
 
-from random import getrandbits
+from random import getrandbits, choices, sample
 from itertools import combinations, product
 
 import numpy as np
-from scipy.spatial import ConvexHull
+from numpy.random import random as rand
+from scipy.spatial import Delaunay, ConvexHull
 from opensimplex import OpenSimplex
-from panda3d.core import GeomVertexArrayFormat, GeomVertexFormat, GeomLinesAdjacency
+from panda3d.core import *
 
 from utils.colour import WHITE
 from utils.math import *
@@ -28,17 +29,13 @@ class Plane4:
     Args:
         origin :: array_like (4,) [X,Y,Z,W]
             A point on the plane.
-        normal :: array_like (4,) [X,Y,Z,W]
-            A unit vector perpendicular to the plane.
-        basis :: array_like (4,3)
-            An array, the columns of which are 4-vectors defining the
-            coordinate space within the hyperplane.
+        basis :: array_like (4,4)
+            An array defining the coordinate space within the plane.
     '''
 
-    def __init__(self, origin, normal, basis):
+    def __init__(self, origin, basis):
         super().__init__()
         self.origin = origin
-        self.normal = normal
         self.basis = basis
 
 
@@ -63,7 +60,7 @@ class Mesh4:
         self.n_tetrahedra = len(tetrahedra)
 
         self.data = GeomVertexData(repr(self), format4, Geom.UHDynamic)
-        self.data.setNumRows(len(vertices))
+        self.data.setNumRows(self.n_vertices)
         self.prim = GeomLinesAdjacency(Geom.UHDynamic)
 
         vertex_writer = GeomVertexWriter(self.data, 'vertex')
@@ -93,103 +90,90 @@ class Mesh4:
 
 
 class Hull4(Mesh4):
-    def __init__(self, vertices, colours):
-        if not colours:
-            colours = [WHITE]
+    '''
+    A convex hull in R4.
+
+    Args:
+        vertices :: array_like (N,4)
+            A list of vertex positions in the mesh.
+        colours :: array_like (N,4)
+            The colour of each vertex.
+    '''
+
+    def __init__(self, vertices, colours=[WHITE]):
         if len(colours) == 1:
-            colours = len(vertices)*colours
+            colours = len(vertices) * colours
+
+        vertices = np.array(vertices)
         colours = np.array(colours)
-
         center = vertices.mean(axis=0)
-        hull = ConvexHull(vertices).simplices
 
-        normals = []
-        for t in hull:
-            _t = vertices[t]
+        # calculate tetrahedra and a normal for each
+        tetrahedra = ConvexHull(vertices).simplices
+        normals = get_tetra_norms(vertices, tetrahedra, center)
 
-            normal = []
-            first = _t[0]
-            _t = _t - first
-
-            for n in range(4):
-                cols = list(range(4))
-                cols.remove(n)
-                det = np.linalg.det(_t[1:, cols])
-                if n % 2:
-                    det *= -1
-                normal.append(det)
-
-            normal = np.stack(normal)
-            if normal.dot(first - center) < 0:
-                normal *= -1
-
-            normals += 4*[normal]
-
-        print(colours)
-
-        vertices = np.concatenate([vertices[t] for t in hull])
-        normals = norm(np.stack(normals), axis=1)
-        colours = np.concatenate([colours[t] for t in hull])
+        # convert to long format (repeated vertices)
+        vertices = np.concatenate([vertices[t] for t in tetrahedra])
+        normals = np.repeat(normals, 4, axis=0)
+        colours = np.concatenate([colours[t] for t in tetrahedra])
         tetrahedra = np.arange(len(vertices)).reshape(-1, 4)
+
 
         super().__init__(vertices, normals, colours, tetrahedra)
 
-class Simplex4(Mesh4):
+
+class Cube4(Hull4):
     '''
-    A 4-simplex, the simplest 4D shape.
+    A hypercube in R4.
 
     Args:
-        vertices :: array_like (5,4)
-            The vertex postitions of the 4-simplex.
-        colours :: array_like (5,4) or (1,4) (optional)
+        size :: array_like (4,) [X,Y,Z,W]
+            The dimensions of the hypercube.
+        colours :: array_like (16,4) or (1,4) (optional)
             The colours of each vertex. If a shape (1,4) is provided then all
             vertices are the same colour. Default: WHITE.
     '''
 
-    def __init__(self, vertices, colours=None):
-        assert len(vertices) == 5
-        if not colours:
-            colours = [WHITE]
+    def __init__(self, size, colours=[WHITE]):
         if len(colours) == 1:
-            colours = 5*colours
+            colours = 16*colours
 
-        vertices = np.array(vertices)
-        center = vertices.mean(axis=0)
+        vertices = list(product(*[(-i/2, i/2) for i in size]))
+        super().__init__(vertices, colours)
 
-        # groups is a list containing, for each vertex, an array of the other
-        # four vertices
-        groups = [np.stack(i) for i in combinations(vertices, 4)]
 
-        # the normal for each tetrahedron is a vector perpedicular found using
-        # the determinant (https://math.stackexchange.com/questions/904172) and
-        # then directed away from the center
-        normals = []
-        for group in groups:
+class Sphere4(Hull4):
+    '''
+    A hypersphere in R4 triangulated randomly.
 
-            normal = []
-            first = group[0]
-            group = group - first
-            for n in range(4):
-                cols = list(range(4))
-                cols.remove(n)
-                det = np.linalg.det(group[1:, cols])
-                if n % 2:
-                    det *= -1
-                normal.append(det)
+    Args:
+        radius :: float
+            The radius of the hypersphere.
+        colours :: array_like (N,4) or (1,4) (optional)
+            The colours of each vertex. If a shape (1,4) is provided then all
+            vertices are the same colour. Default: WHITE.
+        n :: int
+            The number of vertices used to triangulate the sphere. More
+            vertices results in a smoother sphere but may run slower.
+    '''
 
-            normal = np.stack(normal)
-            if normal.dot(first - center) < 0:
-                normal *= -1
-            normals += 4*[normal]
+    def __init__(self, radius, colours=[WHITE], n=1000):
+        if len(colours) == 1:
+            colours = n*colours
 
-        # prepare mesh data
-        vertices = np.concatenate(groups)
-        normals = norm(np.stack(normals), axis=1)
-        colours = [np.stack(i) for i in combinations(colours, 4)]
-        colours = np.concatenate(colours)
-        tetrahedra = np.arange(20).reshape(5, 4)
+        # TODO: There are better ways of sampling this. See
+        # http://extremelearning.com.au/how-to-generate-uniformly-random-points-on-n-spheres-and-n-balls/
 
-        super().__init__(vertices, normals, colours, tetrahedra)
+        vertices = []
+        i = int(1000*rand())
+        while len(vertices) < n:
+            vertex = 2 * np.array(halton([i], (2, 3, 5, 7))[0]) - 1
+            if length(vertex) < 1:
+                vertices.append(radius * norm(vertex))
+            i += 1
+
+        vertices = np.stack(vertices)
+        super().__init__(vertices, colours)
 
 
 class Terrain4(Mesh4):
@@ -199,165 +183,54 @@ class Terrain4(Mesh4):
     Args:
     '''
 
-    def __init__(self, size, shape, scale=1, height=1, colours=None, seed=None):
-        if colours is None:
-            colours = [WHITE]
+    def __init__(self, size, frequency=1, height=1, colours=[WHITE], seed=None, n=1000):
         if len(colours) == 1:
-            colours = np.prod(shape)*colours
-            # colours = [[*np.random.random(3)] + [1]
-            #            for i in range(np.prod(shape))]
+            colours = n * colours
 
         if seed is None:
             seed = getrandbits(32)
+
         self.noise = OpenSimplex(seed).noise3d
+        vertices = halton(range(n), (2, 3, 5))
 
-        # TODO: Is there a better way of sampling the noise? Perhaps radially
+        # set corners
+        c = 8
+        for i, corner in enumerate(product(*3*[(0, 1)])):
+            if i < len(vertices):
+                vertices[i] = corner
 
-        x = np.arange(shape[0])
-        y = np.arange(shape[1])
-        w = np.arange(shape[2])
+        # set edges
+        e = int(12*n**(1/3))
+        for i in range(c, c + e):
+            if i < len(vertices):
+                dims = sample(range(3), k=1)
+                vals = choices(range(2), k=1)
+                for dim, val in zip(dims, vals):
+                    vertices[i][dim] = val
 
-        x, y, w = np.meshgrid(x, y, w)
+        # set faces
+        f = int(6*n**(2/3))
+        for i in range(c + e, c + e + f):
+            if i < len(vertices):
+                dims = sample(range(3), k=2)
+                vals = choices(range(2), k=2)
+                for dim, val in zip(dims, vals):
+                    vertices[i][dim] = val
 
-        odd = (x + y + w) % 2 == 1
-        even = (odd + 1) % 2 == 1
+        vertices = size * np.array(vertices)
+        colours = np.array(colours)
 
-        odd, even = odd[:-1, :-1, :-1], even[:-1, :-1, :-1]
+        tetrahedra = Delaunay(vertices).simplices
+        z = [height*self.noise(x, y, w) for x, y, w in frequency*vertices]
+        vertices = np.insert(vertices, 2, z, axis=1)
 
-        z = []
-        x, y, w = x.flatten(), y.flatten(), w.flatten()
-        for i, j, k in zip(x, y, w):
-            z.append(height*(self.noise(i/scale, j/scale, k/scale) + 1)/2)
+        center = np.array([0, 0, -np.inf, 0])
+        normals = get_tetra_norms(vertices, tetrahedra, center)
 
-        x = size[0] * x
-        y = size[1] * y
-        w = size[2] * w
-
-        vertices = np.stack((x, y, z, w), axis=1)
-
-        t = np.arange(np.prod(shape)).reshape(shape)
-
-        t_0 = t[:-1, :-1, :-1][even]
-        t_1 = t[:-1, :-1, 1:][even]
-        t_2 = t[:-1, 1:, :-1][even]
-        t_3 = t[:-1, 1:, 1:][even]
-        t_4 = t[1:, :-1, :-1][even]
-        t_5 = t[1:, :-1, 1:][even]
-        t_6 = t[1:, 1:, :-1][even]
-        t_7 = t[1:, 1:, 1:][even]
-
-        even = np.concatenate((
-            np.stack((t_0, t_1, t_2, t_4), axis=1),
-            np.stack((t_1, t_2, t_3, t_7), axis=1),
-            np.stack((t_1, t_2, t_4, t_7), axis=1),
-            np.stack((t_1, t_4, t_5, t_7), axis=1),
-            np.stack((t_2, t_4, t_6, t_7), axis=1),
-        ))
-
-        t_0 = t[:-1, :-1, :-1][odd]
-        t_1 = t[:-1, :-1, 1:][odd]
-        t_2 = t[:-1, 1:, :-1][odd]
-        t_3 = t[:-1, 1:, 1:][odd]
-        t_4 = t[1:, :-1, :-1][odd]
-        t_5 = t[1:, :-1, 1:][odd]
-        t_6 = t[1:, 1:, :-1][odd]
-        t_7 = t[1:, 1:, 1:][odd]
-
-        odd = np.concatenate((
-            np.stack((t_7, t_6, t_5, t_3), axis=1),
-            np.stack((t_6, t_5, t_4, t_0), axis=1),
-            np.stack((t_6, t_5, t_3, t_0), axis=1),
-            np.stack((t_6, t_3, t_2, t_0), axis=1),
-            np.stack((t_5, t_3, t_1, t_0), axis=1),
-        ))
-
-        tetrahedra = np.concatenate((even, odd))
-
-        # print(tetrahedra.shape)
-
-        normals = np.prod(shape)*[(0, 0, 1, 0)]
+        # convert to long format (repeated vertices)
+        vertices = np.concatenate([vertices[t] for t in tetrahedra])
+        normals = np.repeat(normals, 4, axis=0)
+        colours = np.concatenate([colours[t] for t in tetrahedra])
+        tetrahedra = np.arange(len(vertices)).reshape(-1, 4)
 
         super().__init__(vertices, normals, colours, tetrahedra)
-
-
-class Sphere4(Mesh4):
-    def __init__(self, r=1, n=16, colours=None):
-        # TODO: Is there a better way of triangulating a hypersphere?
-
-        if colours is None:
-            colours = [WHITE]
-        if len(colours) == 1:
-            colours = (2*n**3)*colours
-
-        theta = np.linspace(0, np.pi, n)
-        phi = np.linspace(0, np.pi, n)
-        omega = np.linspace(0, 2*np.pi, n)
-
-        theta, phi, omega = np.meshgrid(theta, phi, omega)
-
-        x = np.cos(theta)
-        y = np.sin(theta)*np.cos(phi)
-        z = np.sin(theta)*np.sin(phi)*np.cos(omega)
-        w = np.sin(theta)*np.sin(phi)*np.sin(omega)
-        x, y, z, w = x.flatten(), y.flatten(), z.flatten(), w.flatten()
-
-        normals = np.stack((x, y, z, w), axis=1)
-        vertices = r*normals
-
-        t = np.arange(len(vertices)).reshape(theta.shape)
-        t_0 = t[:-1, :-1, :-1].flatten()
-        t_1 = t[:-1, :-1, 1:].flatten()
-        t_2 = t[:-1, 1:, :-1].flatten()
-        t_3 = t[:-1, 1:, 1:].flatten()
-        t_4 = t[1:, :-1, :-1].flatten()
-        t_5 = t[1:, :-1, 1:].flatten()
-        t_6 = t[1:, 1:, :-1].flatten()
-        t_7 = t[1:, 1:, 1:].flatten()
-
-        tetrahedra = np.concatenate((
-            np.stack((t_0, t_1, t_2, t_4), axis=1),
-            np.stack((t_1, t_2, t_3, t_7), axis=1),
-            np.stack((t_1, t_2, t_4, t_7), axis=1),
-            np.stack((t_1, t_4, t_5, t_7), axis=1),
-            np.stack((t_2, t_4, t_6, t_7), axis=1),
-        ))
-
-        super().__init__(vertices, normals, colours, tetrahedra)
-
-
-class Cube4(Hull4):
-    '''
-    A hypercube with arbitrary vertex locations. More like a hyper-
-    quadrilateral.
-
-    Args:
-        vertices :: array_like (16,4)
-            The vertex postitions of the hypercube.
-        colours :: array_like (16,4) or (1,4) (optional)
-            The colours of each vertex. If a shape (1,4) is provided then all
-            vertices are the same colour. Default: WHITE.
-    '''
-
-    def __init__(self, vertices, colours=None):
-        assert len(vertices) == 16
-        if colours is None:
-            colours = [WHITE]
-        if len(colours) == 1:
-            colours = 16*colours
-
-        super().__init__(vertices, colours)
-
-
-class RandSphere(Hull4):
-    def __init__(self, r, n):
-
-        vertices = []
-        while len(vertices) < n:
-            vertex = 2 * np.random.random(4) - 1
-            if length(vertex) < 1:
-                vertices.append(r * norm(vertex))
-
-        vertices = np.stack(vertices)
-        colours = [(114/255, 45/255, 175/255, 1)]
-
-        super().__init__(vertices, colours)
