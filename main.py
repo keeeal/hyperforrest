@@ -1,139 +1,162 @@
+import os, sys
+from pathlib import Path, PosixPath
+from configparser import ConfigParser
+from dataclasses import dataclass
 
-import os, sys, json
-from itertools import combinations, product
-
-import torch
+import esper
 import numpy as np
-from numpy.random import random as rand
 
 from direct.showbase.ShowBase import ShowBase
-from panda3d.core import loadPrcFile
-from panda3d.core import *
+from panda3d.core import (
+    AmbientLight,
+    AntialiasAttrib,
+    DirectionalLight,
+    Shader,
+    Vec3,
+)
+from panda3d.core import load_prc_file
 
-from utils.r4 import *
+
+from utils.shapes import *
 from utils.colour import *
 from utils.math import *
 from utils.transform import *
 
-loadPrcFile(os.path.join('config', 'config.prc'))
+# Components
+
+
+class Position(Vec4):
+    pass
+
+class Basis(Mat4):
+    pass
+
+
+# Systems
+
+
+class ViewPlaneSystem(esper.Processor):
+    def __init__(self, view_plane_id: int) -> None:
+        super().__init__()
+        self.view_plane_id = view_plane_id
+
+    def process(self) -> None:
+        basis = self.world.component_for_entity(self.view_plane_id, Basis)
+
+
+
+
+
+def turn_ana(game):
+    r = rotmat(+0.05)
+    game.view.basis = r * game.view.basis
+    for node_path in game.node_paths:
+        node_path.set_shader_input("plane_basis", game.view.basis)
+
+
+def load_controls(game, path):
+    config = ConfigParser()
+    config.read(path)
+    controls = config["controls"]
+
+    def set_inputs(key: str, value: bool) -> None:
+        game.inputs[controls[key]] = value
+
+    for key, action in controls.items():
+        game.inputs[action] = False
+        game.accept(key, set_inputs, [key, True])
+        game.accept(key + "-up", set_inputs, [key, False])
+
+
+def setup(game):
+
+    my_shapes = []
+
+    my_shapes.append(
+        Translate((0, 0, 0, 0))(
+            Sphere4(2, colours=[(240 / 255, 135 / 255, 99 / 255, 1)])
+        )
+    )
+
+    my_shader = Shader.load(
+        Shader.SL_GLSL,
+        vertex=os.path.join("slicer", "slicer.vert"),
+        fragment=os.path.join("slicer", "slicer.frag"),
+        geometry=os.path.join("slicer", "slicer.geom"),
+    )
+
+    view_plane = game.world.create_entity()
+    game.world.add_component(view_plane, Position())
+    game.world.add_component(view_plane, Basis())
+
+    game.node_paths = [game.render.attachNewNode(s.node) for s in my_shapes]
+
+    for node_path in game.node_paths:
+        node_path.set_shader(my_shader)
+        node_path.setTwoSided(True)
+
+        node_path.set_shader_input(
+            "plane_origin", game.world.component_for_entity(view, Position)
+        )
+        node_path.set_shader_input(
+            "plane_basis", game.world.component_for_entity(view, Basis)
+        )
+
+    # load_controls(game, Path("config") / "controls.ini")
+    # game.setBackgroundColor(94/255, 39/255, 80/255)
+    game.render.setAntialias(AntialiasAttrib.MAuto)
+
+    game.set_camera(1, 1, 16)
+    game.disable_mouse()
+
+
+def setup_lighting(game):
+    # Create some lighting
+    ambientLight = AmbientLight("ambientLight")
+    ambientLight.setColor(Vec4(0.3, 0.3, 0.3, 1))
+    game.render.setLight(game.render.attachNewNode(ambientLight))
+
+    directionalLight = DirectionalLight("directionalLight")
+    directionalLight.setDirection(Vec3(-5, -5, -5))
+    directionalLight.setColor(Vec4(1, 1, 1, 1))
+    directionalLight.setSpecularColor(Vec4(1, 1, 1, 1))
+    game.render.setLight(game.render.attachNewNode(directionalLight))
 
 
 class Game(ShowBase):
     def __init__(self):
+        load_prc_file(Path("config") / "config.prc")
         super().__init__()
 
-        my_shapes = []
+        # Resources
 
-        my_shapes.append(
-            Translate((-5, -5, 0, -5))(
-                Terrain4([10, 10, 10], .3, 1.2, n=1000,
-                         colours=[(215/255, 164/255, 101/255, 1)])
-            )
-        )
+        self.world = esper.World()
+        self.controls = load_controls(Path("config") / "controls.ini")
+        self.inputs = {}
 
-        my_shapes.append(
-            Translate((-5, -5, -.3, -5))(
-                Terrain4([10, 10, 10], .3, .1, n=1000,
-                         colours=[(71/255, 142/255, 172/255, 1)])
-            )
-        )
+        # startup systems
 
-        trunk = []
-        for i in range(20):
-            v = norm(2 * rand(4) - 1)/5
-            v[2] = 0
-            trunk.append(v)
-        for i in range(10):
-            v = norm(2 * rand(4) - 1)/8
-            v[2] = 1
-            trunk.append(v)
+        view_plane = self.world.create_entity()
+        self.world.add_component(view_plane, Position())
+        self.world.add_component(view_plane, Basis())
 
+        # setup(self)
 
-        my_shapes.append(
-            Rotate(.1, 1, 2)(
-                Hull4(trunk, colours=[(188/255, 115/255, 106/255, 1)])
-            )
-        )
+        setup_lighting(self)
 
-        my_shapes.append(
-            Translate((0, 0, 1, 0))(
-                Rotate(.3, 1, 2)(
-                    Scale((1, 1, .2, 1))(
-                        Hull4(trunk, colours=[(188/255, 115/255, 106/255, 1)])
-                    )
-                )
-            )
-        )
+        # systems
 
-        my_shapes.append(
-            Translate((0, 0, 1, 0))(
-                Rotate(-.2, 1, 2)(
-                    Scale((1, 1, .2, 1))(
-                        Hull4(trunk, colours=[(188/255, 115/255, 106/255, 1)])
-                    )
-                )
-            )
-        )
+        self.world.add_processor(ViewPlaneSystem(view_plane))
 
-        # my_shapes.append(
-        #     Translate((-2, -2, 0, -2))(
-        #         Sphere4(1, n=100, colours=[RED])
-        #     )
-        # )
+        # main loop
 
-        my_shader = Shader.load(Shader.SL_GLSL,
-            vertex=os.path.join('slicer', 'slicer.vert'),
-            fragment=os.path.join('slicer', 'slicer.frag'),
-            geometry=os.path.join('slicer', 'slicer.geom'))
+        def process_world(task):
+            self.world.process()
+            return task.cont
 
-        self.view = Plane4(
-            Vec4(0, 0, 0, 0),
-            Mat4(
-                (1, 0, 0, 0),
-                (0, 1, 0, 0),
-                (0, 0, 1, 0),
-                (0, 0, 0, 1),
-            )
-        )
+        self.task_mgr.add(process_world, "process_world")
 
-        self.node_paths = [render.attachNewNode(s.node) for s in my_shapes]
-
-        for node_path in self.node_paths:
-            node_path.set_shader(my_shader)
-            node_path.setTwoSided(True)
-
-            node_path.set_shader_input('plane_origin', self.view.origin)
-            node_path.set_shader_input('plane_basis', self.view.basis)
-
-        controls = os.path.join('config', 'controls.json')
-        self.load_controls(controls)
-
-        self.set_camera(1, 1, 16)
-        self.disable_mouse()
-        self.taskMgr.add(self._loop, 'loop')
-
-        # Create some lighting
-        ambientLight = AmbientLight("ambientLight")
-        ambientLight.setColor(Vec4(.3, .3, .3, 1))
-        self.render.setLight(self.render.attachNewNode(ambientLight))
-
-        directionalLight = DirectionalLight("directionalLight")
-        directionalLight.setDirection(Vec3(-5, -5, -5))
-        directionalLight.setColor(Vec4(1, 1, 1, 1))
-        directionalLight.setSpecularColor(Vec4(1, 1, 1, 1))
-        self.render.setLight(self.render.attachNewNode(directionalLight))
-
-    def set_key(self, key, value):
-        self.keys[key] = value
-
-    def load_controls(self, controls):
-        self.keys, self.ctrl = {}, {}
-        with open(controls) as f:
-            for key, control in json.load(f).items():
-                self.keys[key] = False
-                self.ctrl[key] = getattr(self, control)
-                self.accept(key, self.set_key, [key, True])
-                self.accept(key + '-up', self.set_key, [key, False])
+        self.task_mgr.add(process_inputs, "process_inputs")
 
     def set_camera(self, theta=None, phi=None, radius=None):
         if theta is not None:
@@ -143,69 +166,62 @@ class Game(ShowBase):
         if radius is not None:
             self.camera_radius = radius
         self.camera.set_pos(
-            self.camera_radius * np.sin(self.camera_theta) *
-            np.cos(self.camera_phi),
-            self.camera_radius * np.sin(self.camera_theta) *
-            np.sin(self.camera_phi),
+            self.camera_radius * np.sin(self.camera_theta) * np.cos(self.camera_phi),
+            self.camera_radius * np.sin(self.camera_theta) * np.sin(self.camera_phi),
             self.camera_radius * np.cos(self.camera_theta),
         )
         self.camera.look_at(0, 0, 0)
 
-    def turn_ana(self):
-        r = rotmat(+.05)
-        self.view.basis = r * self.view.basis
-        for node_path in self.node_paths:
-            node_path.set_shader_input('plane_basis', self.view.basis)
+    # def turn_ana(self):
+    #     r = rotmat(+0.05)
+    #     self.view.basis = r * self.view.basis
+    #     for node_path in self.node_paths:
+    #         node_path.set_shader_input("plane_basis", self.view.basis)
 
-    def turn_kata(self):
-        r = rotmat(-.05)
-        self.view.basis = r * self.view.basis
-        for node_path in self.node_paths:
-            node_path.set_shader_input('plane_basis', self.view.basis)
+    # def turn_kata(self):
+    #     r = rotmat(-0.05)
+    #     self.view.basis = r * self.view.basis
+    #     for node_path in self.node_paths:
+    #         node_path.set_shader_input("plane_basis", self.view.basis)
 
-    def walk_forward(self):
-        pass
+    # def walk_forward(self):
+    #     pass
 
-    def walk_backwards(self):
-        pass
+    # def walk_backwards(self):
+    #     pass
 
-    def walk_left(self):
-        pass
+    # def walk_left(self):
+    #     pass
 
-    def walk_right(self):
-        pass
+    # def walk_right(self):
+    #     pass
 
-    def camera_up(self):
-        self.set_camera(theta=max(self.camera_theta - .1, 1*np.pi/8))
+    # def camera_up(self):
+    #     self.set_camera(theta=max(self.camera_theta - 0.1, 1 * np.pi / 8))
 
-    def camera_down(self):
-        self.set_camera(theta=min(self.camera_theta + .1, 7*np.pi/8))
+    # def camera_down(self):
+    #     self.set_camera(theta=min(self.camera_theta + 0.1, 7 * np.pi / 8))
 
-    def camera_left(self):
-        self.set_camera(phi=self.camera_phi - .1)
+    # def camera_left(self):
+    #     self.set_camera(phi=self.camera_phi - 0.1)
 
-    def camera_right(self):
-        self.set_camera(phi=self.camera_phi + .1)
+    # def camera_right(self):
+    #     self.set_camera(phi=self.camera_phi + 0.1)
 
-    def close(self):
-        sys.exit()
+    # def close(self):
+    #     sys.exit()
 
-    def hyper(self):
-        pass
+    # def hyper(self):
+    #     pass
 
-    def _loop(self, task):
-        for key, pressed in self.keys.items():
-            if pressed:
-                self.ctrl[key]()
+    # def loop(self, task):
+    #     for key, pressed in self.keys.items():
+    #         if pressed:
+    #             self.actions[key]()
 
-        return task.cont
+    #     return task.cont
 
 
-def main():
+if __name__ == "__main__":
     game = Game()
     game.run()
-
-
-if __name__ == '__main__':
-    with torch.no_grad():
-        main()

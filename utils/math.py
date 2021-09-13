@@ -1,14 +1,13 @@
-
 import numpy as np
 from panda3d.core import Mat4
 
 
 def length(a, axis=0, keepdims=False):
-    return (a**2).sum(axis, keepdims=keepdims)**.5
+    return (a ** 2).sum(axis, keepdims=keepdims) ** 0.5
 
 
 def norm(a, axis=0):
-    return a/length(a, axis, keepdims=True)
+    return a / length(a, axis, keepdims=True)
 
 
 def rotmat(theta, axis_1=0, axis_2=3):
@@ -46,7 +45,7 @@ def get_tetra_norms(vertices, tetrahedra, center=None):
 
 
 def halton(n, base=(2, 3)):
-    '''
+    """
     Generate a Halton sequence in the range (0, 1) along each dimension.
 
     Args:
@@ -55,15 +54,15 @@ def halton(n, base=(2, 3)):
         base :: array_like (D,)
             The bases to be used for each dimension, where D is the number of
             dimensions of each sequence element.
-    '''
+    """
 
     # TODO: Make this more efficient
     def h(i, b):
         f, r = 1, 0
         while i > 0:
-            f = f/b
-            r = r + f*(i % b)
-            i = int(i/b)
+            f = f / b
+            r = r + f * (i % b)
+            i = int(i / b)
         return r
 
     m = max(base)

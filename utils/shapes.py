@@ -1,16 +1,22 @@
-
 from random import getrandbits, choices, sample
-from itertools import combinations, product
+from itertools import combinations, product, chain, permutations
 
 import numpy as np
 from numpy.random import random as rand
 from scipy.spatial import Delaunay, ConvexHull
 from opensimplex import OpenSimplex
-from panda3d.core import *
+from panda3d.core import (
+    Geom,
+    GeomLinesAdjacency,
+    GeomNode,
+    GeomVertexArrayFormat,
+    GeomVertexFormat,
+    GeomVertexData,
+    GeomVertexWriter,
+)
 
 from utils.colour import WHITE
 from utils.math import *
-from utils.r3 import *
 
 array4 = GeomVertexArrayFormat()
 array4.addColumn("vertex", 4, Geom.NTFloat32, Geom.COther)
@@ -23,7 +29,7 @@ format4 = GeomVertexFormat.registerFormat(format4)
 
 
 class Plane4:
-    '''
+    """
     A hyperplane in R4.
 
     Args:
@@ -31,7 +37,7 @@ class Plane4:
             A point on the plane.
         basis :: array_like (4,4)
             An array defining the coordinate space within the plane.
-    '''
+    """
 
     def __init__(self, origin, basis):
         super().__init__()
@@ -40,7 +46,7 @@ class Plane4:
 
 
 class Mesh4:
-    '''
+    """
     Base class for meshes in R4.
 
     Args:
@@ -52,7 +58,7 @@ class Mesh4:
             The colour of each vertex.
         tetrahedra :: array_like (M,4)
             A list of indices that group vertices into 4-simplices.
-    '''
+    """
 
     def __init__(self, vertices, normals, colours, tetrahedra):
         super().__init__()
@@ -63,9 +69,9 @@ class Mesh4:
         self.data.setNumRows(self.n_vertices)
         self.prim = GeomLinesAdjacency(Geom.UHDynamic)
 
-        vertex_writer = GeomVertexWriter(self.data, 'vertex')
-        normal_writer = GeomVertexWriter(self.data, 'normal')
-        colour_writer = GeomVertexWriter(self.data, 'colour')
+        vertex_writer = GeomVertexWriter(self.data, "vertex")
+        normal_writer = GeomVertexWriter(self.data, "normal")
+        colour_writer = GeomVertexWriter(self.data, "colour")
 
         for vertex in vertices:
             vertex_writer.addData4(*vertex)
@@ -90,7 +96,7 @@ class Mesh4:
 
 
 class Hull4(Mesh4):
-    '''
+    """
     A convex hull in R4.
 
     Args:
@@ -98,7 +104,7 @@ class Hull4(Mesh4):
             A list of vertex positions in the mesh.
         colours :: array_like (N,4)
             The colour of each vertex.
-    '''
+    """
 
     def __init__(self, vertices, colours=[WHITE]):
         if len(colours) == 1:
@@ -118,12 +124,11 @@ class Hull4(Mesh4):
         colours = np.concatenate([colours[t] for t in tetrahedra])
         tetrahedra = np.arange(len(vertices)).reshape(-1, 4)
 
-
         super().__init__(vertices, normals, colours, tetrahedra)
 
 
 class Cube4(Hull4):
-    '''
+    """
     A hypercube in R4.
 
     Args:
@@ -132,18 +137,15 @@ class Cube4(Hull4):
         colours :: array_like (16,4) or (1,4) (optional)
             The colours of each vertex. If a shape (1,4) is provided then all
             vertices are the same colour. Default: WHITE.
-    '''
+    """
 
     def __init__(self, size, colours=[WHITE]):
-        if len(colours) == 1:
-            colours = 16*colours
-
-        vertices = list(product(*[(-i/2, i/2) for i in size]))
+        vertices = list(product(*[(-i / 2, i / 2) for i in size]))
         super().__init__(vertices, colours)
 
 
 class Sphere4(Hull4):
-    '''
+    """
     A hypersphere in R4 triangulated randomly.
 
     Args:
@@ -155,17 +157,14 @@ class Sphere4(Hull4):
         n :: int
             The number of vertices used to triangulate the sphere. More
             vertices results in a smoother sphere but may run slower.
-    '''
+    """
 
-    def __init__(self, radius, colours=[WHITE], n=1000):
-        if len(colours) == 1:
-            colours = n*colours
-
+    def __init__(self, radius, colours=[WHITE], n=1024):
         # TODO: There are better ways of sampling this. See
         # http://extremelearning.com.au/how-to-generate-uniformly-random-points-on-n-spheres-and-n-balls/
 
         vertices = []
-        i = int(1000*rand())
+        i = int(1000 * rand())
         while len(vertices) < n:
             vertex = 2 * np.array(halton([i], (2, 3, 5, 7))[0]) - 1
             if length(vertex) < 1:
@@ -177,11 +176,11 @@ class Sphere4(Hull4):
 
 
 class Terrain4(Mesh4):
-    '''
+    """
     4D terrain procedurally generated using simplex noise.
 
     Args:
-    '''
+    """
 
     def __init__(self, size, frequency=1, height=1, colours=[WHITE], seed=None, n=1000):
         if len(colours) == 1:
@@ -195,12 +194,12 @@ class Terrain4(Mesh4):
 
         # set corners
         c = 8
-        for i, corner in enumerate(product(*3*[(0, 1)])):
+        for i, corner in enumerate(product(*3 * [(0, 1)])):
             if i < len(vertices):
                 vertices[i] = corner
 
         # set edges
-        e = int(12*n**(1/3))
+        e = int(12 * n ** (1 / 3))
         for i in range(c, c + e):
             if i < len(vertices):
                 dims = sample(range(3), k=1)
@@ -209,7 +208,7 @@ class Terrain4(Mesh4):
                     vertices[i][dim] = val
 
         # set faces
-        f = int(6*n**(2/3))
+        f = int(6 * n ** (2 / 3))
         for i in range(c + e, c + e + f):
             if i < len(vertices):
                 dims = sample(range(3), k=2)
@@ -221,7 +220,7 @@ class Terrain4(Mesh4):
         colours = np.array(colours)
 
         tetrahedra = Delaunay(vertices).simplices
-        z = [height*self.noise(x, y, w) for x, y, w in frequency*vertices]
+        z = [height * self.noise(x, y, w) for x, y, w in frequency * vertices]
         vertices = np.insert(vertices, 2, z, axis=1)
 
         center = np.array([0, 0, -np.inf, 0])

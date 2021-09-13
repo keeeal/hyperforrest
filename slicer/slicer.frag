@@ -81,7 +81,7 @@ void main()
     vec4 diffuse = diff * p3d_LightSource[0].color;
 
     // specular
-    float specular_strength = .5;
+    float specular_strength = .2;
     vec3 viewDir = normalize(-fragment_data.vertex.xyz);
     vec3 reflectDir = reflect(-lightDir, norm);
     float spec = pow(max(dot(viewDir, reflectDir), 0.0), 64);
