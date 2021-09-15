@@ -50,6 +50,10 @@ class Game(ShowBase):
         )
 
         self.task_mgr.add(
+            update_camera, "update_camera", extraArgs=(self,), appendTask=True
+        )
+
+        self.task_mgr.add(
             update_exit, "update_exit", extraArgs=(self,), appendTask=True
         )
 
@@ -83,7 +87,7 @@ def update_world(game: Game, task: PythonTask) -> int:
 
 
 def update_view_plane(game: Game, task: PythonTask) -> int:
-    if game.inputs["turn_ana"] or game.inputs["turn_kata"]:
+    if any(map(game.inputs.get, ("turn_ana", "turn_kata"))):
         if game.inputs["turn_ana"]:
             game.view_plane.basis = rotmat(+0.05) * game.view_plane.basis
 
@@ -93,6 +97,16 @@ def update_view_plane(game: Game, task: PythonTask) -> int:
         game.render.set_shader_input("plane_origin", game.view_plane.origin)
         game.render.set_shader_input("plane_basis", game.view_plane.basis)
 
+    return task.cont
+
+
+def update_camera(game: Game, task: PythonTask) -> int:
+    x, y, z = game.camera.get_pos()
+
+    if game.inputs['walk_forward']:
+        x += .1
+
+    game.camera.set_pos(x, y, z)
     return task.cont
 
 
@@ -117,7 +131,7 @@ def setup_test_sphere(game: Game) -> None:
     sphere = Translate((0, 0, 0, 3))(
         Sphere4(2, colours=[(240 / 255, 135 / 255, 99 / 255, 1)])
     )
-    game.render.attachNewNode(sphere.node)
+    game.render.attach_new_node(sphere.node)
 
 
 def setup_shader(game: Game) -> None:
@@ -129,14 +143,14 @@ def setup_shader(game: Game) -> None:
     )
 
     game.render.set_shader(my_shader)
-    game.render.setTwoSided(True)
+    game.render.set_two_sided(True)
     game.render.set_shader_input("plane_origin", game.view_plane.origin)
     game.render.set_shader_input("plane_basis", game.view_plane.basis)
 
 
 def setup_camera(game: Game) -> None:
     # game.setBackgroundColor(94/255, 39/255, 80/255)
-    game.render.setAntialias(AntialiasAttrib.MAuto)
+    game.render.set_antialias(AntialiasAttrib.MAuto)
     game.camera.set_pos(10, 10, 10)
     game.camera.look_at(0, 0, 0)
     game.disable_mouse()
@@ -144,14 +158,14 @@ def setup_camera(game: Game) -> None:
 
 def setup_lighting(game: Game) -> None:
     ambientLight = AmbientLight("ambientLight")
-    ambientLight.setColor(Vec4(0.3, 0.3, 0.3, 1))
-    game.render.setLight(game.render.attachNewNode(ambientLight))
+    ambientLight.set_color(Vec4(0.3, 0.3, 0.3, 1))
+    game.render.set_light(game.render.attach_new_node(ambientLight))
 
     directionalLight = DirectionalLight("directionalLight")
-    directionalLight.setDirection(Vec3(-5, -5, -5))
-    directionalLight.setColor(Vec4(1, 1, 1, 1))
-    directionalLight.setSpecularColor(Vec4(1, 1, 1, 1))
-    game.render.setLight(game.render.attachNewNode(directionalLight))
+    directionalLight.set_direction(Vec3(-5, -5, -5))
+    directionalLight.set_color(Vec4(1, 1, 1, 1))
+    directionalLight.set_specular_color(Vec4(1, 1, 1, 1))
+    game.render.set_light(game.render.attach_new_node(directionalLight))
 
 
 if __name__ == "__main__":
