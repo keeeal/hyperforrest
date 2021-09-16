@@ -1,5 +1,5 @@
 from random import getrandbits, choices, sample
-from itertools import combinations, product, chain, permutations
+from itertools import product
 
 import numpy as np
 from numpy.random import random as rand
@@ -26,23 +26,6 @@ array4.addColumn("colour", 4, Geom.NTFloat32, Geom.CColor)
 format4 = GeomVertexFormat()
 format4.addArray(array4)
 format4 = GeomVertexFormat.registerFormat(format4)
-
-
-class Plane4:
-    """
-    A hyperplane in R4.
-
-    Args:
-        origin :: array_like (4,) [X,Y,Z,W]
-            A point on the plane.
-        basis :: array_like (4,4)
-            An array defining the coordinate space within the plane.
-    """
-
-    def __init__(self, origin, basis):
-        super().__init__()
-        self.origin = origin
-        self.basis = basis
 
 
 class Mesh4:

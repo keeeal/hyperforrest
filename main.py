@@ -1,25 +1,14 @@
-import os, sys
+import sys
 from pathlib import Path
-from configparser import ConfigParser
-from dataclasses import dataclass
-
-import esper
 
 from direct.showbase.ShowBase import ShowBase
-from panda3d.core import (
-    AmbientLight,
-    AntialiasAttrib,
-    DirectionalLight,
-    PythonTask,
-    Shader,
-    Vec3,
-)
 from panda3d.core import load_prc_file
 
-from utils.shapes import *
-from utils.colour import *
-from utils.math import *
-from utils.transform import *
+from systems.camera import Camera
+from systems.control import Control
+from systems.light import setup_light
+from systems.slicer import Slicer
+from systems.world import World
 
 
 class Game(ShowBase):
@@ -27,145 +16,23 @@ class Game(ShowBase):
         load_prc_file(Path("config") / "config.prc")
         super().__init__()
 
-        self.world = esper.World()
-        self.view_plane = ViewPlane()
-        self.inputs = {}
+        self.control = Control(self, Path("config") / "controls.ini")
 
-        setup_controls(self, Path("config") / "controls.ini")
+        self.slicer = Slicer(self, Path("slicer"))
 
-        setup_camera(self)
+        self.world = World(self)
 
-        setup_shader(self)
+        self.camera = Camera(self)
 
-        setup_lighting(self)
+        setup_light(self)
 
-        setup_test_sphere(self)
+        self.task_mgr.add(self.world.update, "update_world")
 
-        self.task_mgr.add(
-            update_world, "update_world", extraArgs=(self,), appendTask=True
-        )
+        self.task_mgr.add(self.slicer.update, "update_slicer")
 
-        self.task_mgr.add(
-            update_view_plane, "update_view_plane", extraArgs=(self,), appendTask=True
-        )
+        self.task_mgr.add(self.camera.update, "update_camera")
 
-        self.task_mgr.add(
-            update_camera, "update_camera", extraArgs=(self,), appendTask=True
-        )
-
-        self.task_mgr.add(
-            update_exit, "update_exit", extraArgs=(self,), appendTask=True
-        )
-
-
-# Components
-
-
-class Position(Vec4):
-    pass
-
-
-@dataclass
-class ViewPlane:
-    origin: Vec4 = Vec4()
-    basis: Mat4 = Mat4()
-
-
-# Systems
-
-
-def update_exit(game: Game, task: PythonTask) -> int:
-    if game.inputs["exit"]:
-        sys.exit()
-
-    return task.cont
-
-
-def update_world(game: Game, task: PythonTask) -> int:
-    game.world.process()
-    return task.cont
-
-
-def update_view_plane(game: Game, task: PythonTask) -> int:
-    if any(map(game.inputs.get, ("turn_ana", "turn_kata"))):
-        if game.inputs["turn_ana"]:
-            game.view_plane.basis = rotmat(+0.05) * game.view_plane.basis
-
-        if game.inputs["turn_kata"]:
-            game.view_plane.basis = rotmat(-0.05) * game.view_plane.basis
-
-        game.render.set_shader_input("plane_origin", game.view_plane.origin)
-        game.render.set_shader_input("plane_basis", game.view_plane.basis)
-
-    return task.cont
-
-
-def update_camera(game: Game, task: PythonTask) -> int:
-    x, y, z = game.camera.get_pos()
-
-    if game.inputs['walk_forward']:
-        x += .1
-
-    game.camera.set_pos(x, y, z)
-    return task.cont
-
-
-# Start-up systems
-
-
-def setup_controls(game: Game, path) -> None:
-    config = ConfigParser()
-    config.read(path)
-    controls = config["controls"]
-
-    def set_inputs(key: str, value: bool) -> None:
-        game.inputs[controls[key]] = value
-
-    for key, action in controls.items():
-        game.inputs[action] = False
-        game.accept(key, set_inputs, [key, True])
-        game.accept(key + "-up", set_inputs, [key, False])
-
-
-def setup_test_sphere(game: Game) -> None:
-    sphere = Translate((0, 0, 0, 3))(
-        Sphere4(2, colours=[(240 / 255, 135 / 255, 99 / 255, 1)])
-    )
-    game.render.attach_new_node(sphere.node)
-
-
-def setup_shader(game: Game) -> None:
-    my_shader = Shader.load(
-        Shader.SL_GLSL,
-        vertex=os.path.join("slicer", "slicer.vert"),
-        geometry=os.path.join("slicer", "slicer.geom"),
-        fragment=os.path.join("slicer", "slicer.frag"),
-    )
-
-    game.render.set_shader(my_shader)
-    game.render.set_two_sided(True)
-    game.render.set_shader_input("plane_origin", game.view_plane.origin)
-    game.render.set_shader_input("plane_basis", game.view_plane.basis)
-
-
-def setup_camera(game: Game) -> None:
-    # game.setBackgroundColor(94/255, 39/255, 80/255)
-    game.render.set_antialias(AntialiasAttrib.MAuto)
-    game.camera.set_pos(10, 10, 10)
-    game.camera.look_at(0, 0, 0)
-    game.disable_mouse()
-
-
-def setup_lighting(game: Game) -> None:
-    ambientLight = AmbientLight("ambientLight")
-    ambientLight.set_color(Vec4(0.3, 0.3, 0.3, 1))
-    game.render.set_light(game.render.attach_new_node(ambientLight))
-
-    directionalLight = DirectionalLight("directionalLight")
-    directionalLight.set_direction(Vec3(-5, -5, -5))
-    directionalLight.set_color(Vec4(1, 1, 1, 1))
-    directionalLight.set_specular_color(Vec4(1, 1, 1, 1))
-    game.render.set_light(game.render.attach_new_node(directionalLight))
+        self.accept("exit", sys.exit)
 
 
 if __name__ == "__main__":
