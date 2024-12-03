@@ -24,16 +24,10 @@ class World(DirectObject):
         super().__init__()
         # self.world = esper.World()
 
-        for translation in (
-            ( 20, 0, 0, 0),
-            (-20, 0, 0, 0),
-            (0,  20, 0, 0),
-            (0, -20, 0, 0),
-            (0, 0,  20, 0),
-            (0, 0, -20, 0),
-        ):
+        for _ in range(100):
+            translation = tuple(rand(4) * 20 - 10)
             sphere = Translate(translation)(
-                Sphere4(2, colours=[tuple(random() for _ in range(3)) + (1,)])
+                Sphere4(2, colours=[tuple(random() for _ in range(3)) + (1,)], n=256)
             )
             game.render.attach_new_node(sphere.node)
 
