@@ -26,7 +26,7 @@ class Game(ShowBase):
 
         setup_light(self)
 
-        self.task_mgr.add(self.world.update, "update_world")
+        # self.task_mgr.add(self.world.update, "update_world")
 
         self.task_mgr.add(self.slicer.update, "update_slicer")
 

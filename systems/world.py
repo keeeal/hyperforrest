@@ -6,7 +6,7 @@ from direct.showbase.DirectObject import DirectObject
 from numpy.random import rand
 from panda3d.core import PythonTask, Vec4
 
-import esper
+# import esper
 
 from utils.transform import Translate
 from utils.shapes import Sphere4
@@ -22,7 +22,7 @@ class Position(Vec4):
 class World(DirectObject):
     def __init__(self, game: Game) -> None:
         super().__init__()
-        self.world = esper.World()
+        # self.world = esper.World()
 
         for translation in (
             ( 20, 0, 0, 0),
@@ -38,5 +38,5 @@ class World(DirectObject):
             game.render.attach_new_node(sphere.node)
 
     def update(self, task: PythonTask) -> int:
-        self.world.process()
+        # self.world.process()
         return task.cont
